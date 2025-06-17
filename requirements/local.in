@@ -1,0 +1,8 @@
+-r base.txt
+
+autopep8  # https://pypi.org/project/autopep8/
+flake8  # https://flake8.pycqa.org/en/latest/
+fabric  # https://www.fabfile.org/
+isort  # https://pypi.org/project/isort/
+pre-commit  # https://pre-commit.com/
+psycopg2-binary  # https://www.psycopg.org/docs/

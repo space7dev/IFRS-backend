@@ -1,0 +1,17 @@
+[Unit]
+Description=Celery Server
+After=network.target
+
+[Service]
+User=django
+Group=www-data
+WorkingDirectory=/home/django/sites/staging.example.com/src/project/
+ExecStart=/home/django/sites/staging.example.com/staging/bin/celery -A project worker -B --pidfile=/var/run/celery/staging.pid --logfile=/var/log/celery/staging.log --loglevel=INFO
+ExecReload=/bin/kill -HUP $pid
+Restart=on-failure
+Environment=project.settings.settings
+Environment=LC_ALL=C.UTF-8
+Environment=LANG=C.UTF-8
+
+[Install]
+WantedBy=multi-user.target

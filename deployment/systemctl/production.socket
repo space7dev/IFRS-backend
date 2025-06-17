@@ -1,0 +1,11 @@
+[Unit]
+Description=production gunicorn socket
+
+[Socket]
+ListenStream=/run/production-gunicorn.sock
+SocketMode=0660
+SocketUser=django
+SocketGroup=www-data
+
+[Install]
+WantedBy=sockets.target

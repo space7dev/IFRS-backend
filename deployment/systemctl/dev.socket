@@ -1,0 +1,11 @@
+[Unit]
+Description=chatgpt gunicorn socket
+
+[Socket]
+ListenStream=/run/chatgpt-gunicorn.sock
+SocketMode=0660
+SocketUser=django
+SocketGroup=www-data
+
+[Install]
+WantedBy=sockets.target

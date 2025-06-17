@@ -1,0 +1,41 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+exclude: '^manage.py$'
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.2.0
+    hooks:
+    -   id: check-ast
+    -   id: trailing-whitespace
+        exclude: static/third_party/
+    -   id: check-yaml
+    -   id: check-added-large-files
+    -   id: check-json
+    -   id: debug-statements
+    -   id: detect-private-key
+        stages: [commit, merge-commit, manual, push]
+    -   id: end-of-file-fixer
+        types: [python]
+        exclude: migrations/
+-   repo: https://github.com/pycqa/isort
+    rev: 5.11.3
+    hooks:
+    -   id: isort
+        name: isort (python)
+        exclude: migrations/
+        files: \.py$
+-   repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.3.1
+    hooks:
+    -   id: remove-tabs
+        exclude: static/third_party/
+# -   repo: https://github.com/ecugol/pre-commit-hooks-django
+#     rev: v0.4.0
+#     hooks:
+#     -   id: check-unapplied-migrations
+#     -   id: check-absent-migrations
+-   repo: https://github.com/pre-commit/mirrors-autopep8
+    rev: v2.0.1
+    hooks:
+    -   id: autopep8
+        exclude: migrations/

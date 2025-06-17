@@ -1,0 +1,11 @@
+[Unit]
+Description=staging gunicorn socket
+
+[Socket]
+ListenStream=/run/staging-gunicorn.sock
+SocketMode=0660
+SocketUser=django
+SocketGroup=www-data
+
+[Install]
+WantedBy=sockets.target

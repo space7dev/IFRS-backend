@@ -1,0 +1,69 @@
+{% extends "registration/email/_base.html" %}
+{% block email_body %}
+    <div class="u-row-container" style="padding: 0px;background-color: transparent">
+        <div class="u-row" style="Margin: 0 auto;min-width: 320px;max-width: 550px;overflow-wrap: break-word;word-wrap: break-word;word-break: break-word;background-color: #ffffff;">
+            <div style="border-collapse: collapse;display: table;width: 100%;background-color: transparent;">
+                <!--[if (mso)|(IE)]><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding: 0px;background-color: transparent;" align="center"><table cellpadding="0" cellspacing="0" border="0" style="width:550px;"><tr style="background-color: #ffffff;"><![endif]-->
+
+                <!--[if (mso)|(IE)]><td align="center" width="550" style="width: 550px;padding: 0px;border-top: 0px solid transparent;border-left: 0px solid transparent;border-right: 0px solid transparent;border-bottom: 0px solid transparent;" valign="top"><![endif]-->
+                <div class="u-col u-col-100" style="max-width: 320px;min-width: 550px;display: table-cell;vertical-align: top;">
+                    <div style="width: 100% !important;">
+                        <!--[if (!mso)&(!IE)]><!--><div style="padding: 0px;border-top: 0px solid transparent;border-left: 0px solid transparent;border-right: 0px solid transparent;border-bottom: 0px solid transparent;"><!--<![endif]-->
+
+                        <table style="font-family:'Raleway',sans-serif;" role="presentation" cellpadding="0" cellspacing="0" width="100%" border="0">
+                            <tbody>
+                            <tr>
+                                <td style="overflow-wrap:break-word;word-break:break-word;padding:10px;font-family:'Raleway',sans-serif;" align="left">
+                                    <h1 style="margin: 0px; color: #34495e; line-height: 140%; text-align: center; word-wrap: break-word; font-weight: normal; font-family: 'Playfair Display',serif; font-size: 32px;">
+                                        Welcome to {{ current_site.name }}!&nbsp;
+                                    </h1>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+
+                        {% include 'registration/email/empty_cell_container.html' %}
+
+                        <table style="font-family:'Raleway',sans-serif;" role="presentation" cellpadding="0" cellspacing="0" width="100%" border="0">
+                            <tbody>
+                            <tr>
+                                <td style="overflow-wrap:break-word;word-break:break-word;padding:10px 10px 20px;font-family:'Raleway',sans-serif;" align="left">
+
+                                    <div style="color: #34495e; line-height: 160%; text-align: center; word-wrap: break-word;">
+                                        <p style="font-size: 14px; line-height: 160%;">You're receiving this e-mail because an administrator from our site has created a manager user account for you and invited you to the site.</p>
+                                        <p style="font-size: 14px; line-height: 160%;">To accept the invitation please click the link below to reset your password.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+
+                        {% include 'registration/email/empty_cell_container.html' %}
+
+                        <table style="font-family:'Raleway',sans-serif;" role="preentation" cellpadding="0" cellspacing="0" width="100%" border="0">
+                            <tbody>
+                            <tr>
+                                <td style="overflow-wrap:break-word;word-break:break-word;padding:10px;font-family:'Raleway',sans-serif;" align="left">
+                                    <div align="center">
+                                        <!--[if mso]><table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-spacing: 0; border-collapse: collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;font-family:'Raleway',sans-serif;"><tr><td style="font-family:'Raleway',sans-serif;" align="center"><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="" style="height:41px; v-text-anchor:middle; width:213px;" arcsize="0%" stroke="f" fillcolor="#34495e"><w:anchorlock/><center style="color:#FFFFFF;font-family:'Raleway',sans-serif;"><![endif]-->
+                                        <a href="{{ password_reset_url }}" target="_blank" style="box-sizing: border-box;display: inline-block;font-family:'Raleway',sans-serif;text-decoration: none;-webkit-text-size-adjust: none;text-align: center;color: #FFFFFF; background-color: #34495e; border-radius: 0px;-webkit-border-radius: 0px; -moz-border-radius: 0px; width:auto; max-width:100%; overflow-wrap: break-word; word-break: break-word; word-wrap:break-word; mso-border-alt: none;">
+                                            <span style="display:block;padding:12px 40px;line-height:120%;"><span style="font-size: 14px; line-height: 16.8px;">LOGIN</span></span>
+                                        </a>
+                                        <!--[if mso]></center></v:roundrect></td></tr></table><![endif]-->
+                                    </div>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+
+                        {% include 'registration/email/empty_cell_container.html' %}
+
+                        <!--[if (!mso)&(!IE)]><!--></div><!--<![endif]-->
+                    </div>
+                </div>
+                <!--[if (mso)|(IE)]></td><![endif]-->
+                <!--[if (mso)|(IE)]></tr></table></td></tr></table><![endif]-->
+            </div>
+        </div>
+    </div>
+{% endblock email_body %}
