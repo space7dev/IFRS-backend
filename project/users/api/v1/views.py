@@ -214,6 +214,9 @@ class LoginView(DjrestLoginView):
         res = super().get_response()
         if res.status_code == status.HTTP_200_OK:
             res.data["detail"] = "Login Successful."
+            
+            user_serializer = UserDetailsSerializer(self.user)
+            res.data["user"] = user_serializer.data
 
         return res
 
@@ -308,6 +311,9 @@ class RegisterView(DjrestRegisterView):
             res.data[
                 "detail"
             ] = "User registration successful. Email validation link sent."
+            
+            user_serializer = UserDetailsSerializer(self.user)
+            res.data["user"] = user_serializer.data
 
         return res
 
