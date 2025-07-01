@@ -13,8 +13,8 @@ from whisper_integration.api.v1.urls import (
 )
 from management.api.v1.urls import api_patterns as management_api_patterns
 from users.api.v1.urls import api_patterns as registration_api_patterns
+from model_definitions.api.v1.urls import api_patterns as model_definitions_api_patterns
 
-# Documentation Schema settings for generating API Docs
 schema_view = get_schema_view(
     openapi.Info(
         title="ChatGPT Scaffold API",
@@ -37,4 +37,5 @@ urlpatterns = [
     path("v1/whisper-integration/", include(whisper_integration_api_patterns)),
     path("v1/management/", include(management_api_patterns)),
     path("v1/widgets/", include(widgets_api_patterns)),
+    path("v1/model-definitions/", include(model_definitions_api_patterns)),
 ]
