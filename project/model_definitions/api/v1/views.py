@@ -19,11 +19,11 @@ from .serializers import (
 
 
 class ModelDefinitionViewSet(viewsets.ModelViewSet):
-    queryset = ModelDefinition.objects.exclude(status='deleted')
+    queryset = ModelDefinition.objects.all()
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['status', 'created_by']
-    search_fields = ['name', 'description']
+    filterset_fields = ['created_by']
+    search_fields = ['name']
     ordering_fields = ['name', 'created_on', 'modified_on']
     ordering = ['-modified_on']
 
@@ -77,7 +77,6 @@ class ModelDefinitionViewSet(viewsets.ModelViewSet):
             ModelDefinitionHistory.objects.create(
                 model=model_def,
                 name=model_def.name,
-                description=model_def.description,
                 version=model_def.version,
                 config=model_def.config,
                 modified_by=request.user
@@ -124,9 +123,7 @@ class ModelDefinitionViewSet(viewsets.ModelViewSet):
                 "detail": "You cannot delete this model."
             }, status=status.HTTP_403_FORBIDDEN)
         
-        instance.status = 'deleted'
-        instance.last_modified_by = request.user
-        instance.save()
+        instance.delete()
         
         return Response({
             "detail": "Model definition deleted successfully."
@@ -202,7 +199,6 @@ class ModelDefinitionViewSet(viewsets.ModelViewSet):
         
         cloned_data = {
             'name': new_name,
-            'description': request.data.get('description', f"Cloned from {source_instance.name}"),
             'config': cloned_config,
             'cloned_from': source_instance.id
         }
@@ -218,7 +214,6 @@ class ModelDefinitionViewSet(viewsets.ModelViewSet):
             ModelDefinitionHistory.objects.create(
                 model=cloned_instance,
                 name=cloned_instance.name,
-                description=cloned_instance.description,
                 version=cloned_instance.version,
                 config=cloned_instance.config,
                 modified_by=request.user

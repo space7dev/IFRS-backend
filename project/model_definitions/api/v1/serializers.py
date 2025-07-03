@@ -10,9 +10,9 @@ User = get_user_model()
 
 
 class ModelDefinitionListSerializer(serializers.ModelSerializer):
-    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
-    last_modified_by_name = serializers.CharField(source='last_modified_by.get_full_name', read_only=True)
-    locked_by_name = serializers.CharField(source='locked_by.get_full_name', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    last_modified_by_name = serializers.SerializerMethodField()
+    locked_by_name = serializers.SerializerMethodField()
     is_locked = serializers.BooleanField(read_only=True)
     can_edit = serializers.SerializerMethodField()
 
@@ -21,10 +21,8 @@ class ModelDefinitionListSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'name',
-            'description',
             'version',
             'config',
-            'status',
             'created_by',
             'created_by_name',
             'last_modified_by',
@@ -48,11 +46,35 @@ class ModelDefinitionListSerializer(serializers.ModelSerializer):
             return obj.can_edit(request.user)
         return False
 
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            full_name = obj.created_by.get_full_name().strip()
+            if full_name:
+                return full_name
+            return f"{obj.created_by.username}"
+        return "Unknown"
+
+    def get_last_modified_by_name(self, obj):
+        if obj.last_modified_by:
+            full_name = obj.last_modified_by.get_full_name().strip()
+            if full_name:
+                return full_name
+            return f"{obj.last_modified_by.username}"
+        return "Unknown"
+
+    def get_locked_by_name(self, obj):
+        if obj.locked_by:
+            full_name = obj.locked_by.get_full_name().strip()
+            if full_name:
+                return full_name
+            return f"{obj.locked_by.username}"
+        return None
+
 
 class ModelDefinitionDetailSerializer(serializers.ModelSerializer):
-    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
-    last_modified_by_name = serializers.CharField(source='last_modified_by.get_full_name', read_only=True)
-    locked_by_name = serializers.CharField(source='locked_by.get_full_name', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    last_modified_by_name = serializers.SerializerMethodField()
+    locked_by_name = serializers.SerializerMethodField()
     cloned_from_name = serializers.CharField(source='cloned_from.name', read_only=True)
     is_locked = serializers.BooleanField(read_only=True)
     can_edit = serializers.SerializerMethodField()
@@ -62,10 +84,8 @@ class ModelDefinitionDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'name',
-            'description',
             'version',
             'config',
-            'status',
             'created_by',
             'created_by_name',
             'last_modified_by',
@@ -91,6 +111,30 @@ class ModelDefinitionDetailSerializer(serializers.ModelSerializer):
             return obj.can_edit(request.user)
         return False
 
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            full_name = obj.created_by.get_full_name().strip()
+            if full_name:
+                return full_name
+            return f"{obj.created_by.username}"
+        return "Unknown"
+
+    def get_last_modified_by_name(self, obj):
+        if obj.last_modified_by:
+            full_name = obj.last_modified_by.get_full_name().strip()
+            if full_name:
+                return full_name
+            return f"{obj.last_modified_by.username}"
+        return "Unknown"
+
+    def get_locked_by_name(self, obj):
+        if obj.locked_by:
+            full_name = obj.locked_by.get_full_name().strip()
+            if full_name:
+                return full_name
+            return f"{obj.locked_by.username}"
+        return None
+
 
 class ModelDefinitionCreateSerializer(serializers.ModelSerializer):
     cloned_from = serializers.PrimaryKeyRelatedField(
@@ -103,7 +147,6 @@ class ModelDefinitionCreateSerializer(serializers.ModelSerializer):
         model = ModelDefinition
         fields = [
             'name',
-            'description',
             'config',
             'cloned_from'
         ]
@@ -187,13 +230,18 @@ class ModelDefinitionUpdateSerializer(serializers.ModelSerializer):
         ModelDefinitionHistory.objects.create(
             model=instance,
             name=instance.name,
-            description=instance.description,
             version=instance.version,
             config=instance.config,
             modified_by=request.user
         )
         
         if 'config' in validated_data:
+            config = validated_data['config']
+            general_info = config.get('generalInfo', {})
+            
+            if 'modelName' in general_info:
+                instance.name = general_info['modelName']
+            
             version_parts = instance.version.replace('v', '').split('.')
             if len(version_parts) >= 2:
                 minor = int(version_parts[1]) + 1
@@ -205,7 +253,7 @@ class ModelDefinitionUpdateSerializer(serializers.ModelSerializer):
 
 
 class ModelDefinitionHistorySerializer(serializers.ModelSerializer):
-    modified_by_name = serializers.CharField(source='modified_by.get_full_name', read_only=True)
+    modified_by_name = serializers.SerializerMethodField()
     model_name = serializers.CharField(source='model.name', read_only=True)
 
     class Meta:
@@ -215,7 +263,6 @@ class ModelDefinitionHistorySerializer(serializers.ModelSerializer):
             'model',
             'model_name',
             'name',
-            'description',
             'version',
             'config',
             'saved_at',
@@ -223,6 +270,14 @@ class ModelDefinitionHistorySerializer(serializers.ModelSerializer):
             'modified_by_name'
         ]
         read_only_fields = (
-            'id', 'model', 'model_name', 'name', 'description', 'version',
+            'id', 'model', 'model_name', 'name', 'version',
             'config', 'saved_at', 'modified_by', 'modified_by_name'
-        ) 
+        )
+
+    def get_modified_by_name(self, obj):
+        if obj.modified_by:
+            full_name = obj.modified_by.get_full_name().strip()
+            if full_name:
+                return full_name
+            return f"{obj.modified_by.username}"
+        return "Unknown" 

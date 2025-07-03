@@ -8,22 +8,9 @@ User = get_user_model()
 
 
 class ModelDefinition(TimeStampedMixin):
-    STATUS_CHOICES = [
-        ('draft', 'Draft'),
-        ('active', 'Active'),
-        ('locked', 'Locked'),
-        ('deleted', 'Deleted'),
-    ]
-
     name = models.CharField(max_length=100, unique=True)
-    description = models.TextField(blank=True)
     version = models.CharField(max_length=20, default="v1.0")
-    config = models.JSONField(default=dict)  # All configuration including product_type, measurement_model, assumptions, formulas, parameters
-    status = models.CharField(
-        max_length=10, 
-        choices=STATUS_CHOICES, 
-        default='draft'
-    )
+    config = models.JSONField(default=dict)  # All configuration including generalInfo (description, status, productType, measurementModel), assumptions, formulas, parameters
     
     created_by = models.ForeignKey(
         User, 
@@ -67,10 +54,14 @@ class ModelDefinition(TimeStampedMixin):
         return self.locked_by is not None
 
     def can_edit(self, user):
-        if self.status == 'locked':
-            return False
         if self.locked_by and self.locked_by != user:
             return False
+        
+        general_info = self.config.get('generalInfo', {})
+        status = general_info.get('status', 'draft')
+        if status == 'locked':
+            return False
+            
         return True
 
 
@@ -81,7 +72,6 @@ class ModelDefinitionHistory(models.Model):
         related_name='history'
     )
     name = models.CharField(max_length=100)
-    description = models.TextField(blank=True)
     version = models.CharField(max_length=20)
     config = models.JSONField(default=dict)  # All configuration data at time of save
     saved_at = models.DateTimeField(auto_now_add=True)
@@ -98,3 +88,4 @@ class ModelDefinitionHistory(models.Model):
 
     def __str__(self):
         return f"{self.name} v{self.version} - {self.saved_at}"
+
