@@ -1,10 +1,12 @@
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus
 
 User = get_user_model()
 
@@ -280,4 +282,263 @@ class ModelDefinitionHistorySerializer(serializers.ModelSerializer):
             if full_name:
                 return full_name
             return f"{obj.modified_by.username}"
-        return "Unknown" 
+        return "Unknown"
+
+
+class DataUploadBatchSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField()
+    last_modified_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = DataUploadBatch
+        fields = [
+            'id',
+            'batch_id',
+            'name',
+            'batch_type',
+            'batch_model',
+            'insurance_type',
+            'batch_year',
+            'batch_quarter',
+            'created_by',
+            'created_by_name',
+            'last_modified_by',
+            'last_modified_by_name',
+            'batch_status',
+            'upload_count',
+            'created_on',
+            'modified_on',
+        ]
+        read_only_fields = [
+            'id', 'batch_id', 'created_by', 'last_modified_by', 'upload_count', 'created_on', 'modified_on'
+        ]
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            full_name = obj.created_by.get_full_name().strip()
+            if full_name:
+                return full_name
+            return f"{obj.created_by.username}"
+        return "Unknown"
+    
+    def get_last_modified_by_name(self, obj):
+        if obj.last_modified_by:
+            full_name = obj.last_modified_by.get_full_name().strip()
+            if full_name:
+                return full_name
+            return f"{obj.last_modified_by.username}"
+        return "Unknown"
+    
+    def create(self, validated_data):
+        request = self.context.get('request')
+        validated_data['created_by'] = request.user
+        validated_data['last_modified_by'] = request.user
+        return super().create(validated_data)
+
+
+class DataUploadSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.SerializerMethodField()
+    batch_id = serializers.CharField(source='batch.batch_id', read_only=True)
+    file_upload = serializers.FileField(required=False)
+    
+    class Meta:
+        model = DataUpload
+        fields = [
+            'id',
+            'upload_id',
+            'batch',
+            'batch_id',
+            'source',
+            'insurance_type',
+            'data_type',
+            'quarter',
+            'year',
+            'uploaded_by',
+            'uploaded_by_name',
+            'file_upload',
+            'original_filename',
+            'file_size',
+            'validation_status',
+            'rows_processed',
+            'error_count',
+            'validation_errors',
+            'api_payload',
+            'created_on',
+            'modified_on',
+        ]
+        read_only_fields = [
+            'id', 'upload_id', 'uploaded_by', 'original_filename', 'file_size',
+            'rows_processed', 'error_count', 'validation_errors', 'created_on', 'modified_on'
+        ]
+    
+    def get_uploaded_by_name(self, obj):
+        if obj.uploaded_by:
+            full_name = obj.uploaded_by.get_full_name().strip()
+            if full_name:
+                return full_name
+            return f"{obj.uploaded_by.username}"
+        return "Unknown"
+    
+    def create(self, validated_data):
+        request = self.context.get('request')
+        validated_data['uploaded_by'] = request.user
+        return super().create(validated_data)
+
+
+class DataUploadTemplateSerializer(serializers.ModelSerializer):
+    
+    class Meta:
+        model = DataUploadTemplate
+        fields = [
+            'id',
+            'name',
+            'data_type',
+            'template_file',
+            'version',
+            'is_active',
+            'is_standard_template',
+            'created_on',
+            'modified_on',
+        ]
+        read_only_fields = ['id', 'created_on', 'modified_on']
+
+
+class APIUploadLogSerializer(serializers.ModelSerializer):
+    data_upload_id = serializers.CharField(source='data_upload.upload_id', read_only=True)
+    
+    class Meta:
+        model = APIUploadLog
+        fields = [
+            'id',
+            'reporting_date',
+            'upload_date',
+            'sum_of_premiums',
+            'sum_of_paid_claims',
+            'sum_of_commissions',
+            'status',
+            'data_upload',
+            'data_upload_id',
+            'api_payload',
+            'error_message',
+            'created_on',
+            'modified_on',
+        ]
+        read_only_fields = ['id', 'upload_date', 'created_on', 'modified_on']
+
+
+class DataBatchStatusSerializer(serializers.ModelSerializer):
+    batch_name = serializers.SerializerMethodField()
+    batch_type_display = serializers.SerializerMethodField()
+    batch_status_display = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = DataBatchStatus
+        fields = [
+            'id',
+            'batch_id',
+            'document_type',
+            'upload_status',
+            'batch_name',
+            'batch_type_display',
+            'batch_status_display',
+        ]
+        read_only_fields = ['id', 'batch_name', 'batch_type_display', 'batch_status_display']
+    
+    def get_batch_name(self, obj):
+        batch = obj.batch
+        return batch.name if batch else 'N/A'
+    
+    def get_batch_type_display(self, obj):
+        batch = obj.batch
+        return batch.get_batch_type_display() if batch else 'N/A'
+    
+    def get_batch_status_display(self, obj):
+        batch = obj.batch
+        return batch.get_batch_status_display() if batch else 'N/A'
+
+class FileUploadSerializer(serializers.ModelSerializer):
+    file_upload = serializers.FileField()
+    
+    class Meta:
+        model = DataUpload
+        fields = [
+            'batch',
+            'source',
+            'insurance_type',
+            'data_type',
+            'quarter',
+            'year',
+            'file_upload',
+        ]
+    
+    def validate_file_upload(self, value):
+        if value.size > 50 * 1024 * 1024:  # 50MB limit
+            raise ValidationError("File size cannot exceed 50MB")
+        
+        if not value.name.endswith(('.xlsx', '.xls')):
+            raise ValidationError("Only Excel files (.xlsx, .xls) are allowed")
+        
+        return value
+    
+    def create(self, validated_data):
+        request = self.context.get('request')
+        validated_data['uploaded_by'] = request.user
+        return super().create(validated_data)
+
+
+class BulkUploadSerializer(serializers.Serializer):
+    batch_id = serializers.CharField(required=True)
+    uploads = serializers.JSONField(
+        help_text="List of upload objects with fields: source, insurance_type, data_type, quarter, year"
+    )
+    
+    def validate_batch_id(self, value):
+        try:
+            batch = DataUploadBatch.objects.get(batch_id=value)
+            if batch.batch_status != 'draft':
+                raise ValidationError("Cannot add uploads to a batch that is not in draft status")
+        except DataUploadBatch.DoesNotExist:
+            raise ValidationError("Batch not found")
+        return value
+    
+    def validate_uploads(self, value):
+        if not isinstance(value, list):
+            raise ValidationError("Uploads must be a list")
+        
+        if len(value) < 1 or len(value) > 10:
+            raise ValidationError("Uploads list must contain between 1 and 10 items")
+        
+        required_fields = ['source', 'insurance_type', 'data_type', 'quarter', 'year']
+        
+        for i, upload in enumerate(value):
+            if not isinstance(upload, dict):
+                raise ValidationError(f"Upload {i+1} must be an object")
+            
+            for field in required_fields:
+                if field not in upload:
+                    raise ValidationError(f"Upload {i+1} is missing required field: {field}")
+        
+        return value
+    
+    def create(self, validated_data):
+        batch_id = validated_data['batch_id']
+        uploads_data = validated_data['uploads']
+        
+        batch = DataUploadBatch.objects.get(batch_id=batch_id)
+        request = self.context.get('request')
+        
+        created_uploads = []
+        for upload_data in uploads_data:
+            file_upload = upload_data.get('file_upload')
+            if file_upload:
+                if file_upload.size > 50 * 1024 * 1024:  # 50MB limit
+                    raise ValidationError("File size cannot exceed 50MB")
+                if not file_upload.name.endswith(('.xlsx', '.xls')):
+                    raise ValidationError("Only Excel files (.xlsx, .xls) are allowed")
+            
+            upload_data['batch'] = batch
+            upload_data['uploaded_by'] = request.user
+            upload = DataUpload.objects.create(**upload_data)
+            created_uploads.append(upload)
+        
+        return created_uploads 
