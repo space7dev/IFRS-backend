@@ -4,13 +4,13 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from django.utils import timezone
 from django.db import transaction
 from django.http import HttpResponse, Http404
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig
 from .serializers import (
     ModelDefinitionListSerializer,
     ModelDefinitionDetailSerializer,
@@ -23,7 +23,11 @@ from .serializers import (
     APIUploadLogSerializer,
     DataBatchStatusSerializer,
     FileUploadSerializer,
-    BulkUploadSerializer
+    BulkUploadSerializer,
+    DocumentTypeConfigSerializer,
+    DocumentTypeConfigListSerializer,
+    DocumentTypeConfigCreateSerializer,
+    DocumentTypeConfigUpdateSerializer
 )
 
 
@@ -600,3 +604,90 @@ class DataBatchStatusViewSet(viewsets.ModelViewSet):
             return Response({
                 "detail": "Status record not found."
             }, status=status.HTTP_404_NOT_FOUND)
+
+
+class DocumentTypeConfigViewSet(viewsets.ModelViewSet):
+    queryset = DocumentTypeConfig.objects.all()
+    serializer_class = DocumentTypeConfigSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['batch_type', 'batch_model', 'insurance_type', 'required']
+    search_fields = ['document_type', 'batch_type', 'batch_model', 'insurance_type']
+    ordering_fields = ['created_on', 'modified_on', 'batch_type', 'batch_model', 'insurance_type', 'document_type']
+    ordering = ['batch_type', 'batch_model', 'insurance_type', 'document_type']
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return DocumentTypeConfigListSerializer
+        elif self.action == 'create':
+            return DocumentTypeConfigCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return DocumentTypeConfigUpdateSerializer
+        return DocumentTypeConfigSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            return Response({
+                "detail": "Document type configurations retrieved successfully.",
+                "results": response.data
+            })
+        return response
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        document_type_config = serializer.save()
+        
+        return Response({
+            "detail": "Document type configuration created successfully.",
+            "documentTypeConfig": DocumentTypeConfigSerializer(document_type_config, context={'request': request}).data
+        }, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        document_type_config = serializer.save()
+        
+        return Response({
+            "detail": "Document type configuration updated successfully.",
+            "documentTypeConfig": DocumentTypeConfigSerializer(document_type_config, context={'request': request}).data
+        })
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({
+            "detail": "Document type configuration deleted successfully."
+        }, status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['get'])
+    def download_template(self, request, pk=None):
+        document_type_config = self.get_object()
+        
+        if not document_type_config.template:
+            return Response({
+                "detail": "No template file associated with this configuration."
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            response = HttpResponse(
+                document_type_config.template.read(), 
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            filename = document_type_config.template.name.split('/')[-1]
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        except Exception as e:
+            return Response({
+                "detail": "Error downloading template file.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

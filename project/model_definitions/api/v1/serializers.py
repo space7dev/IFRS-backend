@@ -6,7 +6,7 @@ from drf_yasg import openapi
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig
 
 User = get_user_model()
 
@@ -542,3 +542,139 @@ class BulkUploadSerializer(serializers.Serializer):
             created_uploads.append(upload)
         
         return created_uploads 
+
+
+class DocumentTypeConfigSerializer(serializers.ModelSerializer):
+    template = serializers.FileField(required=True)
+    
+    class Meta:
+        model = DocumentTypeConfig
+        fields = [
+            'id',
+            'batch_type',
+            'batch_model', 
+            'insurance_type',
+            'document_type',
+            'required',
+            'template',
+            'created_on',
+            'modified_on',
+        ]
+        read_only_fields = ['id', 'created_on', 'modified_on']
+    
+    def validate_template(self, value):
+        if value.size > 10 * 1024 * 1024:  # 10MB limit
+            raise ValidationError("Template file size cannot exceed 10MB")
+        
+        if not value.name.endswith(('.xlsx', '.xls')):
+            raise ValidationError("Only Excel files (.xlsx, .xls) are allowed")
+        
+        return value
+
+
+class DocumentTypeConfigListSerializer(serializers.ModelSerializer):
+    template_name = serializers.SerializerMethodField()
+    template_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = DocumentTypeConfig
+        fields = [
+            'id',
+            'batch_type',
+            'batch_model',
+            'insurance_type', 
+            'document_type',
+            'required',
+            'template_name',
+            'template_url',
+            'created_on',
+            'modified_on',
+        ]
+    
+    def get_template_name(self, obj):
+        if obj.template:
+            return obj.template.name.split('/')[-1]
+        return None
+    
+    def get_template_url(self, obj):
+        if obj.template:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.template.url)
+        return None
+
+
+class DocumentTypeConfigCreateSerializer(serializers.ModelSerializer):
+    template = serializers.FileField(required=True)
+    
+    class Meta:
+        model = DocumentTypeConfig
+        fields = [
+            'batch_type',
+            'batch_model',
+            'insurance_type',
+            'document_type',
+            'required',
+            'template',
+        ]
+    
+    def validate_template(self, value):
+        if value.size > 10 * 1024 * 1024:  # 10MB limit
+            raise ValidationError("Template file size cannot exceed 10MB")
+        
+        if not value.name.endswith(('.xlsx', '.xls')):
+            raise ValidationError("Only Excel files (.xlsx, .xls) are allowed")
+        
+        return value
+    
+    def validate(self, data):
+        existing = DocumentTypeConfig.objects.filter(
+            batch_type=data['batch_type'],
+            batch_model=data['batch_model'],
+            insurance_type=data['insurance_type'],
+            document_type=data['document_type']
+        ).exists()
+        
+        if existing:
+            raise ValidationError("This document type configuration already exists.")
+        
+        return data
+
+
+class DocumentTypeConfigUpdateSerializer(serializers.ModelSerializer):
+    template = serializers.FileField(required=False)
+    
+    class Meta:
+        model = DocumentTypeConfig
+        fields = [
+            'batch_type',
+            'batch_model',
+            'insurance_type',
+            'document_type',
+            'required',
+            'template',
+        ]
+    
+    def validate_template(self, value):
+        if value and value.size > 10 * 1024 * 1024:
+            raise ValidationError("Template file size cannot exceed 10MB")
+        
+        if value and not value.name.endswith(('.xlsx', '.xls')):
+            raise ValidationError("Only Excel files (.xlsx, .xls) are allowed")
+        
+        return value
+    
+    def validate(self, data):
+        instance = self.instance
+        
+        existing = DocumentTypeConfig.objects.filter(
+            batch_type=data.get('batch_type', instance.batch_type),
+            batch_model=data.get('batch_model', instance.batch_model),
+            insurance_type=data.get('insurance_type', instance.insurance_type),
+            document_type=data.get('document_type', instance.document_type)
+        ).exclude(pk=instance.pk).exists()
+        
+        if existing:
+            raise ValidationError("This document type configuration already exists.")
+        
+        return data 

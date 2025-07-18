@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus
+from .models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig
 
 
 @admin.register(ModelDefinition)
@@ -265,3 +265,24 @@ class DataBatchStatusAdmin(admin.ModelAdmin):
         batch = obj.batch
         return batch.get_batch_status_display() if batch else 'N/A'
     get_batch_status.short_description = 'Batch Status'
+
+
+@admin.register(DocumentTypeConfig)
+class DocumentTypeConfigAdmin(admin.ModelAdmin):
+    list_display = ['batch_type', 'batch_model', 'insurance_type', 'document_type', 'required', 'template', 'created_on']
+    list_filter = ['batch_type', 'batch_model', 'insurance_type', 'required', 'created_on']
+    search_fields = ['document_type', 'batch_type', 'insurance_type']
+    readonly_fields = ['created_on', 'modified_on']
+    
+    fieldsets = [
+        ('Configuration', {
+            'fields': ['batch_type', 'batch_model', 'insurance_type', 'document_type', 'required', 'template']
+        }),
+        ('Timestamps', {
+            'fields': ['created_on', 'modified_on'],
+            'classes': ['collapse']
+        })
+    ]
+    
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)

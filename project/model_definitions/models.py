@@ -467,3 +467,59 @@ class APIUploadLog(TimeStampedMixin):
     def __str__(self):
         return f"API Upload - {self.reporting_date} ({self.status})"
 
+
+class DocumentTypeConfig(TimeStampedMixin):
+    BATCH_TYPE_CHOICES = [
+        ('custom', 'Custom'),
+        ('staging', 'Staging'),
+    ]
+    
+    BATCH_MODEL_CHOICES = [
+        ('PAA', 'PAA'),
+        ('GMM', 'GMM'),
+        ('VFA', 'VFA'),
+    ]
+    
+    INSURANCE_TYPE_CHOICES = [
+        ('direct', 'Direct'),
+        ('reinsurance', 'Reinsurance'),
+        ('group', 'Group'),
+    ]
+    
+    batch_type = models.CharField(
+        max_length=20,
+        choices=BATCH_TYPE_CHOICES,
+        help_text="Custom or Staging"
+    )
+    batch_model = models.CharField(
+        max_length=10,
+        choices=BATCH_MODEL_CHOICES,
+        help_text="PAA, GMM, VFA"
+    )
+    insurance_type = models.CharField(
+        max_length=50,
+        choices=INSURANCE_TYPE_CHOICES,
+        help_text="Direct, Reinsurance, Group"
+    )
+    document_type = models.CharField(
+        max_length=100,
+        help_text="e.g., Premiums, Claims Paid, Manual Data, etc."
+    )
+    required = models.BooleanField(
+        default=True,
+        help_text="TRUE if document is required, FALSE if optional"
+    )
+    template = models.FileField(
+        upload_to='document_templates/',
+        help_text="Excel template file for this document type"
+    )
+    
+    class Meta:
+        ordering = ['batch_type', 'batch_model', 'insurance_type', 'document_type']
+        verbose_name = 'Document Type Configuration'
+        verbose_name_plural = 'Document Type Configurations'
+        unique_together = ['batch_type', 'batch_model', 'insurance_type', 'document_type']
+    
+    def __str__(self):
+        return f"{self.batch_type} - {self.batch_model} - {self.insurance_type} - {self.document_type}"
+
