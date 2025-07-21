@@ -605,7 +605,7 @@ class DocumentTypeConfigListSerializer(serializers.ModelSerializer):
 
 
 class DocumentTypeConfigCreateSerializer(serializers.ModelSerializer):
-    template = serializers.FileField(required=True)
+    template = serializers.FileField(required=False)
     
     class Meta:
         model = DocumentTypeConfig
@@ -619,10 +619,10 @@ class DocumentTypeConfigCreateSerializer(serializers.ModelSerializer):
         ]
     
     def validate_template(self, value):
-        if value.size > 10 * 1024 * 1024:  # 10MB limit
+        if value and value.size > 10 * 1024 * 1024:
             raise ValidationError("Template file size cannot exceed 10MB")
         
-        if not value.name.endswith(('.xlsx', '.xls')):
+        if value and not value.name.endswith(('.xlsx', '.xls')):
             raise ValidationError("Only Excel files (.xlsx, .xls) are allowed")
         
         return value

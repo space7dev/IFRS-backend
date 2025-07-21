@@ -305,37 +305,24 @@ class DataUploadBatchViewSet(viewsets.ModelViewSet):
         }, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'])
-    def save_batch(self, request, pk=None):
+    def complete_batch(self, request, pk=None):
         batch = self.get_object()
         
-        if batch.batch_status != 'draft':
+        if batch.batch_status != 'pending':
             return Response({
-                "detail": "Only draft batches can be saved."
+                "detail": "Only pending batches can be completed."
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        batch.batch_status = 'saved'
+        if batch.upload_count == 0:
+            return Response({
+                "detail": "Cannot complete batch without any uploads."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        batch.batch_status = 'completed'
         batch.save()
         
         return Response({
-            "detail": "Batch saved successfully.",
-            "batch": DataUploadBatchSerializer(batch).data
-        })
-
-    @action(detail=True, methods=['post'])
-    def validate_batch(self, request, pk=None):
-        batch = self.get_object()
-        
-        if batch.batch_status != 'saved':
-            return Response({
-                "detail": "Only saved batches can be validated."
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # TODO: Implement validation logic
-        batch.batch_status = 'validated'
-        batch.save()
-        
-        return Response({
-            "detail": "Batch validated successfully.",
+            "detail": "Batch completed successfully.",
             "batch": DataUploadBatchSerializer(batch).data
         })
 

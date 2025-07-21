@@ -94,9 +94,8 @@ class ModelDefinitionHistory(models.Model):
 
 class DataUploadBatch(TimeStampedMixin):
     BATCH_STATUS_CHOICES = [
-        ('draft', 'Draft'),
-        ('saved', 'Saved'),
-        ('validated', 'Validated'),
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
     ]
     
     BATCH_TYPE_CHOICES = [
@@ -168,7 +167,7 @@ class DataUploadBatch(TimeStampedMixin):
     batch_status = models.CharField(
         max_length=20, 
         choices=BATCH_STATUS_CHOICES, 
-        default='draft'
+        default='pending'
     )
     upload_count = models.IntegerField(default=0)
     
