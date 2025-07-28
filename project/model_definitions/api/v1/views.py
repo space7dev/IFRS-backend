@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.db import transaction
 from django.http import HttpResponse, Http404
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig
 from .serializers import (
     ModelDefinitionListSerializer,
     ModelDefinitionDetailSerializer,
@@ -27,7 +27,15 @@ from .serializers import (
     DocumentTypeConfigSerializer,
     DocumentTypeConfigListSerializer,
     DocumentTypeConfigCreateSerializer,
-    DocumentTypeConfigUpdateSerializer
+    DocumentTypeConfigUpdateSerializer,
+    CalculationConfigSerializer,
+    CalculationConfigListSerializer,
+    CalculationConfigCreateSerializer,
+    CalculationConfigUpdateSerializer,
+    ConversionConfigSerializer,
+    ConversionConfigListSerializer,
+    ConversionConfigCreateSerializer,
+    ConversionConfigUpdateSerializer
 )
 
 
@@ -676,5 +684,179 @@ class DocumentTypeConfigViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({
                 "detail": "Error downloading template file.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CalculationConfigViewSet(viewsets.ModelViewSet):
+    queryset = CalculationConfig.objects.all()
+    serializer_class = CalculationConfigSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['batch_type', 'batch_model', 'insurance_type', 'required']
+    search_fields = ['engine_type', 'batch_type', 'batch_model', 'insurance_type']
+    ordering_fields = ['created_on', 'modified_on', 'batch_type', 'batch_model', 'insurance_type', 'engine_type']
+    ordering = ['batch_type', 'batch_model', 'insurance_type', 'engine_type']
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return CalculationConfigListSerializer
+        elif self.action == 'create':
+            return CalculationConfigCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return CalculationConfigUpdateSerializer
+        return CalculationConfigSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            return Response({
+                "detail": "Calculation configurations retrieved successfully.",
+                "results": response.data
+            })
+        return response
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        calculation_config = serializer.save()
+        
+        return Response({
+            "detail": "Calculation configuration created successfully.",
+            "engineConfig": CalculationConfigSerializer(calculation_config, context={'request': request}).data
+        }, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        calculation_config = serializer.save()
+        
+        return Response({
+            "detail": "Calculation configuration updated successfully.",
+            "engineConfig": CalculationConfigSerializer(calculation_config, context={'request': request}).data
+        })
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({
+            "detail": "Calculation configuration deleted successfully."
+        }, status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['get'])
+    def download_script(self, request, pk=None):
+        calculation_config = self.get_object()
+        
+        if not calculation_config.script:
+            return Response({
+                "detail": "No script file associated with this configuration."
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            response = HttpResponse(
+                calculation_config.script.read(), 
+                content_type='text/x-python'
+            )
+            filename = calculation_config.script.name.split('/')[-1]
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        except Exception as e:
+            return Response({
+                "detail": "Error downloading script file.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ConversionConfigViewSet(viewsets.ModelViewSet):
+    queryset = ConversionConfig.objects.all()
+    serializer_class = ConversionConfigSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['batch_type', 'batch_model', 'insurance_type', 'required']
+    search_fields = ['engine_type', 'batch_type', 'batch_model', 'insurance_type']
+    ordering_fields = ['created_on', 'modified_on', 'batch_type', 'batch_model', 'insurance_type', 'engine_type']
+    ordering = ['batch_type', 'batch_model', 'insurance_type', 'engine_type']
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ConversionConfigListSerializer
+        elif self.action == 'create':
+            return ConversionConfigCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return ConversionConfigUpdateSerializer
+        return ConversionConfigSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            return Response({
+                "detail": "Conversion configurations retrieved successfully.",
+                "results": response.data
+            })
+        return response
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        conversion_config = serializer.save()
+        
+        return Response({
+            "detail": "Conversion configuration created successfully.",
+            "engineConfig": ConversionConfigSerializer(conversion_config, context={'request': request}).data
+        }, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        conversion_config = serializer.save()
+        
+        return Response({
+            "detail": "Conversion configuration updated successfully.",
+            "engineConfig": ConversionConfigSerializer(conversion_config, context={'request': request}).data
+        })
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({
+            "detail": "Conversion configuration deleted successfully."
+        }, status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['get'])
+    def download_script(self, request, pk=None):
+        conversion_config = self.get_object()
+        
+        if not conversion_config.script:
+            return Response({
+                "detail": "No script file associated with this configuration."
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            response = HttpResponse(
+                conversion_config.script.read(), 
+                content_type='text/x-python'
+            )
+            filename = conversion_config.script.name.split('/')[-1]
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        except Exception as e:
+            return Response({
+                "detail": "Error downloading script file.",
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

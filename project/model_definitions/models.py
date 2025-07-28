@@ -522,3 +522,115 @@ class DocumentTypeConfig(TimeStampedMixin):
     def __str__(self):
         return f"{self.batch_type} - {self.batch_model} - {self.insurance_type} - {self.document_type}"
 
+
+class CalculationConfig(TimeStampedMixin):
+    BATCH_TYPE_CHOICES = [
+        ('custom', 'Custom'),
+        ('staging', 'Staging'),
+    ]
+    
+    BATCH_MODEL_CHOICES = [
+        ('PAA', 'PAA'),
+        ('GMM', 'GMM'),
+        ('VFA', 'VFA'),
+    ]
+    
+    INSURANCE_TYPE_CHOICES = [
+        ('direct', 'Direct'),
+        ('reinsurance', 'Reinsurance'),
+        ('group', 'Group'),
+    ]
+    
+    batch_type = models.CharField(
+        max_length=20,
+        choices=BATCH_TYPE_CHOICES,
+        help_text="Custom or Staging"
+    )
+    batch_model = models.CharField(
+        max_length=10,
+        choices=BATCH_MODEL_CHOICES,
+        help_text="PAA, GMM, VFA"
+    )
+    insurance_type = models.CharField(
+        max_length=50,
+        choices=INSURANCE_TYPE_CHOICES,
+        help_text="Direct, Reinsurance, Group"
+    )
+    engine_type = models.CharField(
+        max_length=100,
+        help_text="e.g., Premium Calculation, Reserve Calculation, etc."
+    )
+    required = models.BooleanField(
+        default=True,
+        help_text="TRUE if engine is required, FALSE if optional"
+    )
+    script = models.FileField(
+        upload_to='calculation_scripts/',
+        help_text="Python script file for this calculation engine"
+    )
+    
+    class Meta:
+        ordering = ['batch_type', 'batch_model', 'insurance_type', 'engine_type']
+        verbose_name = 'Calculation Engine Configuration'
+        verbose_name_plural = 'Calculation Engine Configurations'
+        unique_together = ['batch_type', 'batch_model', 'insurance_type', 'engine_type']
+    
+    def __str__(self):
+        return f"{self.batch_type} - {self.batch_model} - {self.insurance_type} - {self.engine_type}"
+
+
+class ConversionConfig(TimeStampedMixin):
+    BATCH_TYPE_CHOICES = [
+        ('custom', 'Custom'),
+        ('staging', 'Staging'),
+    ]
+    
+    BATCH_MODEL_CHOICES = [
+        ('PAA', 'PAA'),
+        ('GMM', 'GMM'),
+        ('VFA', 'VFA'),
+    ]
+    
+    INSURANCE_TYPE_CHOICES = [
+        ('direct', 'Direct'),
+        ('reinsurance', 'Reinsurance'),
+        ('group', 'Group'),
+    ]
+    
+    batch_type = models.CharField(
+        max_length=20,
+        choices=BATCH_TYPE_CHOICES,
+        help_text="Custom or Staging"
+    )
+    batch_model = models.CharField(
+        max_length=10,
+        choices=BATCH_MODEL_CHOICES,
+        help_text="PAA, GMM, VFA"
+    )
+    insurance_type = models.CharField(
+        max_length=50,
+        choices=INSURANCE_TYPE_CHOICES,
+        help_text="Direct, Reinsurance, Group"
+    )
+    engine_type = models.CharField(
+        max_length=100,
+        help_text="e.g., Data Conversion, Format Transformation, etc."
+    )
+    required = models.BooleanField(
+        default=True,
+        help_text="TRUE if engine is required, FALSE if optional"
+    )
+    script = models.FileField(
+        upload_to='conversion_scripts/',
+        help_text="Python script file for this conversion engine"
+    )
+    
+    class Meta:
+        ordering = ['batch_type', 'batch_model', 'insurance_type', 'engine_type']
+        verbose_name = 'Conversion Engine Configuration'
+        verbose_name_plural = 'Conversion Engine Configurations'
+        unique_together = ['batch_type', 'batch_model', 'insurance_type', 'engine_type']
+    
+    def __str__(self):
+        return f"{self.batch_type} - {self.batch_model} - {self.insurance_type} - {self.engine_type}"
+

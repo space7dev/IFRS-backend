@@ -6,7 +6,7 @@ from drf_yasg import openapi
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig
 
 User = get_user_model()
 
@@ -676,5 +676,279 @@ class DocumentTypeConfigUpdateSerializer(serializers.ModelSerializer):
         
         if existing:
             raise ValidationError("This document type configuration already exists.")
+        
+        return data
+
+
+# Calculation Config Serializers
+class CalculationConfigSerializer(serializers.ModelSerializer):
+    script = serializers.FileField(required=True)
+    
+    class Meta:
+        model = CalculationConfig
+        fields = [
+            'id',
+            'batch_type',
+            'batch_model', 
+            'insurance_type',
+            'engine_type',
+            'required',
+            'script',
+            'created_on',
+            'modified_on',
+        ]
+        read_only_fields = ['id', 'created_on', 'modified_on']
+    
+    def validate_script(self, value):
+        if value.size > 10 * 1024 * 1024:  # 10MB limit
+            raise ValidationError("Script file size cannot exceed 10MB")
+        
+        if not value.name.endswith('.py'):
+            raise ValidationError("Only Python files (.py) are allowed")
+        
+        return value
+
+
+class CalculationConfigListSerializer(serializers.ModelSerializer):
+    script_name = serializers.SerializerMethodField()
+    script_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CalculationConfig
+        fields = [
+            'id',
+            'batch_type',
+            'batch_model',
+            'insurance_type', 
+            'engine_type',
+            'required',
+            'script_name',
+            'script_url',
+            'created_on',
+            'modified_on',
+        ]
+    
+    def get_script_name(self, obj):
+        if obj.script:
+            return obj.script.name.split('/')[-1]
+        return None
+    
+    def get_script_url(self, obj):
+        if obj.script:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.script.url)
+        return None
+
+
+class CalculationConfigCreateSerializer(serializers.ModelSerializer):
+    script = serializers.FileField(required=True)
+    
+    class Meta:
+        model = CalculationConfig
+        fields = [
+            'batch_type',
+            'batch_model',
+            'insurance_type',
+            'engine_type',
+            'required',
+            'script',
+        ]
+    
+    def validate_script(self, value):
+        if value and value.size > 10 * 1024 * 1024:
+            raise ValidationError("Script file size cannot exceed 10MB")
+        
+        if value and not value.name.endswith('.py'):
+            raise ValidationError("Only Python files (.py) are allowed")
+        
+        return value
+    
+    def validate(self, data):
+        existing = CalculationConfig.objects.filter(
+            batch_type=data['batch_type'],
+            batch_model=data['batch_model'],
+            insurance_type=data['insurance_type'],
+            engine_type=data['engine_type']
+        ).exists()
+        
+        if existing:
+            raise ValidationError("This calculation configuration already exists.")
+        
+        return data
+
+
+class CalculationConfigUpdateSerializer(serializers.ModelSerializer):
+    script = serializers.FileField(required=False)
+    
+    class Meta:
+        model = CalculationConfig
+        fields = [
+            'batch_type',
+            'batch_model',
+            'insurance_type',
+            'engine_type',
+            'required',
+            'script',
+        ]
+    
+    def validate_script(self, value):
+        if value and value.size > 10 * 1024 * 1024:
+            raise ValidationError("Script file size cannot exceed 10MB")
+        
+        if value and not value.name.endswith('.py'):
+            raise ValidationError("Only Python files (.py) are allowed")
+        
+        return value
+    
+    def validate(self, data):
+        instance = self.instance
+        
+        existing = CalculationConfig.objects.filter(
+            batch_type=data.get('batch_type', instance.batch_type),
+            batch_model=data.get('batch_model', instance.batch_model),
+            insurance_type=data.get('insurance_type', instance.insurance_type),
+            engine_type=data.get('engine_type', instance.engine_type)
+        ).exclude(pk=instance.pk).exists()
+        
+        if existing:
+            raise ValidationError("This calculation configuration already exists.")
+        
+        return data
+
+
+# Conversion Config Serializers
+class ConversionConfigSerializer(serializers.ModelSerializer):
+    script = serializers.FileField(required=True)
+    
+    class Meta:
+        model = ConversionConfig
+        fields = [
+            'id',
+            'batch_type',
+            'batch_model', 
+            'insurance_type',
+            'engine_type',
+            'required',
+            'script',
+            'created_on',
+            'modified_on',
+        ]
+        read_only_fields = ['id', 'created_on', 'modified_on']
+    
+    def validate_script(self, value):
+        if value.size > 10 * 1024 * 1024:  # 10MB limit
+            raise ValidationError("Script file size cannot exceed 10MB")
+        
+        if not value.name.endswith('.py'):
+            raise ValidationError("Only Python files (.py) are allowed")
+        
+        return value
+
+
+class ConversionConfigListSerializer(serializers.ModelSerializer):
+    script_name = serializers.SerializerMethodField()
+    script_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ConversionConfig
+        fields = [
+            'id',
+            'batch_type',
+            'batch_model',
+            'insurance_type', 
+            'engine_type',
+            'required',
+            'script_name',
+            'script_url',
+            'created_on',
+            'modified_on',
+        ]
+    
+    def get_script_name(self, obj):
+        if obj.script:
+            return obj.script.name.split('/')[-1]
+        return None
+    
+    def get_script_url(self, obj):
+        if obj.script:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.script.url)
+        return None
+
+
+class ConversionConfigCreateSerializer(serializers.ModelSerializer):
+    script = serializers.FileField(required=True)
+    
+    class Meta:
+        model = ConversionConfig
+        fields = [
+            'batch_type',
+            'batch_model',
+            'insurance_type',
+            'engine_type',
+            'required',
+            'script',
+        ]
+    
+    def validate_script(self, value):
+        if value and value.size > 10 * 1024 * 1024:
+            raise ValidationError("Script file size cannot exceed 10MB")
+        
+        if value and not value.name.endswith('.py'):
+            raise ValidationError("Only Python files (.py) are allowed")
+        
+        return value
+    
+    def validate(self, data):
+        existing = ConversionConfig.objects.filter(
+            batch_type=data['batch_type'],
+            batch_model=data['batch_model'],
+            insurance_type=data['insurance_type'],
+            engine_type=data['engine_type']
+        ).exists()
+        
+        if existing:
+            raise ValidationError("This conversion configuration already exists.")
+        
+        return data
+
+
+class ConversionConfigUpdateSerializer(serializers.ModelSerializer):
+    script = serializers.FileField(required=False)
+    
+    class Meta:
+        model = ConversionConfig
+        fields = [
+            'batch_type',
+            'batch_model',
+            'insurance_type',
+            'engine_type',
+            'required',
+            'script',
+        ]
+    
+    def validate_script(self, value):
+        if value and value.size > 10 * 1024 * 1024:
+            raise ValidationError("Script file size cannot exceed 10MB")
+        
+        if value and not value.name.endswith('.py'):
+            raise ValidationError("Only Python files (.py) are allowed")
+        
+        return value
+    
+    def validate(self, data):
+        instance = self.instance
+        
+        existing = ConversionConfig.objects.filter(
+            batch_type=data.get('batch_type', instance.batch_type),
+            batch_model=data.get('batch_model', instance.batch_model),
+            insurance_type=data.get('insurance_type', instance.insurance_type),
+            engine_type=data.get('engine_type', instance.engine_type)
+        ).exclude(pk=instance.pk).exists()
+        
+        if existing:
+            raise ValidationError("This conversion configuration already exists.")
         
         return data 

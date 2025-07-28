@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig
+from .models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig
 
 
 @admin.register(ModelDefinition)
@@ -277,6 +277,48 @@ class DocumentTypeConfigAdmin(admin.ModelAdmin):
     fieldsets = [
         ('Configuration', {
             'fields': ['batch_type', 'batch_model', 'insurance_type', 'document_type', 'required', 'template']
+        }),
+        ('Timestamps', {
+            'fields': ['created_on', 'modified_on'],
+            'classes': ['collapse']
+        })
+    ]
+    
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(CalculationConfig)
+class CalculationConfigAdmin(admin.ModelAdmin):
+    list_display = ['batch_type', 'batch_model', 'insurance_type', 'engine_type', 'required', 'script', 'created_on']
+    list_filter = ['batch_type', 'batch_model', 'insurance_type', 'required', 'created_on']
+    search_fields = ['engine_type', 'batch_type', 'insurance_type']
+    readonly_fields = ['created_on', 'modified_on']
+    
+    fieldsets = [
+        ('Configuration', {
+            'fields': ['batch_type', 'batch_model', 'insurance_type', 'engine_type', 'required', 'script']
+        }),
+        ('Timestamps', {
+            'fields': ['created_on', 'modified_on'],
+            'classes': ['collapse']
+        })
+    ]
+    
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(ConversionConfig)
+class ConversionConfigAdmin(admin.ModelAdmin):
+    list_display = ['batch_type', 'batch_model', 'insurance_type', 'engine_type', 'required', 'script', 'created_on']
+    list_filter = ['batch_type', 'batch_model', 'insurance_type', 'required', 'created_on']
+    search_fields = ['engine_type', 'batch_type', 'insurance_type']
+    readonly_fields = ['created_on', 'modified_on']
+    
+    fieldsets = [
+        ('Configuration', {
+            'fields': ['batch_type', 'batch_model', 'insurance_type', 'engine_type', 'required', 'script']
         }),
         ('Timestamps', {
             'fields': ['created_on', 'modified_on'],

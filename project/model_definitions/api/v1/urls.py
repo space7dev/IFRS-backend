@@ -10,7 +10,9 @@ from .views import (
     DataUploadTemplateViewSet,
     APIUploadLogViewSet,
     DataBatchStatusViewSet,
-    DocumentTypeConfigViewSet
+    DocumentTypeConfigViewSet,
+    CalculationConfigViewSet,
+    ConversionConfigViewSet
 )
 
 router = routers.SimpleRouter()
@@ -22,6 +24,8 @@ router.register(r"data-upload-templates", DataUploadTemplateViewSet, basename="d
 router.register(r"api-upload-logs", APIUploadLogViewSet, basename="api-upload-log")
 router.register(r"data-batch-status", DataBatchStatusViewSet, basename="data-batch-status")
 router.register(r"document-type-config", DocumentTypeConfigViewSet, basename="document-type-config")
+router.register(r"calculation-config", CalculationConfigViewSet, basename="calculation-config")
+router.register(r"conversion-config", ConversionConfigViewSet, basename="conversion-config")
 router.register(r"", ModelDefinitionViewSet, basename="model-definition")
 
 api_patterns = router.urls 
