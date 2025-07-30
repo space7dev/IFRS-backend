@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig
+from .models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness
 
 
 @admin.register(ModelDefinition)
@@ -319,6 +319,48 @@ class ConversionConfigAdmin(admin.ModelAdmin):
     fieldsets = [
         ('Configuration', {
             'fields': ['batch_type', 'batch_model', 'insurance_type', 'engine_type', 'required', 'script']
+        }),
+        ('Timestamps', {
+            'fields': ['created_on', 'modified_on'],
+            'classes': ['collapse']
+        })
+    ]
+    
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(Currency)
+class CurrencyAdmin(admin.ModelAdmin):
+    list_display = ['code', 'name', 'is_active', 'created_on']
+    list_filter = ['is_active', 'created_on']
+    search_fields = ['code', 'name']
+    readonly_fields = ['created_on', 'modified_on']
+    
+    fieldsets = [
+        ('Basic Information', {
+            'fields': ['code', 'name', 'is_active']
+        }),
+        ('Timestamps', {
+            'fields': ['created_on', 'modified_on'],
+            'classes': ['collapse']
+        })
+    ]
+    
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(LineOfBusiness)
+class LineOfBusinessAdmin(admin.ModelAdmin):
+    list_display = ['batch_model', 'insurance_type', 'line_of_business', 'currency', 'is_active', 'created_on']
+    list_filter = ['batch_model', 'insurance_type', 'currency', 'is_active', 'created_on']
+    search_fields = ['line_of_business', 'batch_model', 'insurance_type']
+    readonly_fields = ['created_on', 'modified_on']
+    
+    fieldsets = [
+        ('Configuration', {
+            'fields': ['batch_model', 'insurance_type', 'line_of_business', 'currency', 'is_active']
         }),
         ('Timestamps', {
             'fields': ['created_on', 'modified_on'],

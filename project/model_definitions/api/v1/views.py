@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.db import transaction
 from django.http import HttpResponse, Http404
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness
 from .serializers import (
     ModelDefinitionListSerializer,
     ModelDefinitionDetailSerializer,
@@ -35,7 +35,15 @@ from .serializers import (
     ConversionConfigSerializer,
     ConversionConfigListSerializer,
     ConversionConfigCreateSerializer,
-    ConversionConfigUpdateSerializer
+    ConversionConfigUpdateSerializer,
+    CurrencySerializer,
+    CurrencyListSerializer,
+    CurrencyCreateSerializer,
+    CurrencyUpdateSerializer,
+    LineOfBusinessSerializer,
+    LineOfBusinessListSerializer,
+    LineOfBusinessCreateSerializer,
+    LineOfBusinessUpdateSerializer
 )
 
 
@@ -810,53 +818,195 @@ class ConversionConfigViewSet(viewsets.ModelViewSet):
         return response
 
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        conversion_config = serializer.save()
-        
-        return Response({
-            "detail": "Conversion configuration created successfully.",
-            "engineConfig": ConversionConfigSerializer(conversion_config, context={'request': request}).data
-        }, status=status.HTTP_201_CREATED)
+        response = super().create(request, *args, **kwargs)
+        if response.status_code == status.HTTP_201_CREATED:
+            return Response({
+                "detail": "Conversion configuration created successfully.",
+                "conversion_config": response.data
+            }, status=status.HTTP_201_CREATED)
+        return response
 
     def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        conversion_config = serializer.save()
-        
-        return Response({
-            "detail": "Conversion configuration updated successfully.",
-            "engineConfig": ConversionConfigSerializer(conversion_config, context={'request': request}).data
-        })
+        response = super().update(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            return Response({
+                "detail": "Conversion configuration updated successfully.",
+                "conversion_config": response.data
+            })
+        return response
 
     def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        self.perform_destroy(instance)
-        return Response({
-            "detail": "Conversion configuration deleted successfully."
-        }, status=status.HTTP_204_NO_CONTENT)
+        response = super().destroy(request, *args, **kwargs)
+        if response.status_code == status.HTTP_204_NO_CONTENT:
+            return Response({
+                "detail": "Conversion configuration deleted successfully."
+            }, status=status.HTTP_200_OK)
+        return response
 
     @action(detail=True, methods=['get'])
     def download_script(self, request, pk=None):
-        conversion_config = self.get_object()
-        
-        if not conversion_config.script:
-            return Response({
-                "detail": "No script file associated with this configuration."
-            }, status=status.HTTP_404_NOT_FOUND)
-        
         try:
-            response = HttpResponse(
-                conversion_config.script.read(), 
-                content_type='text/x-python'
-            )
-            filename = conversion_config.script.name.split('/')[-1]
-            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            conversion_config = self.get_object()
+            if not conversion_config.script:
+                return Response({
+                    "detail": "No script file available for this conversion configuration."
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            response = HttpResponse(conversion_config.script, content_type='application/octet-stream')
+            response['Content-Disposition'] = f'attachment; filename="{conversion_config.script.name.split("/")[-1]}"'
             return response
-        except Exception as e:
+        except Http404:
             return Response({
-                "detail": "Error downloading script file.",
-                "error": str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                "detail": "Conversion configuration not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+
+class CurrencyViewSet(viewsets.ModelViewSet):
+    queryset = Currency.objects.all()
+    serializer_class = CurrencySerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['is_active']
+    search_fields = ['code', 'name']
+    ordering_fields = ['code', 'name', 'created_on', 'modified_on']
+    ordering = ['code']
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return CurrencyListSerializer
+        elif self.action == 'create':
+            return CurrencyCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return CurrencyUpdateSerializer
+        return CurrencySerializer
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            return Response({
+                "detail": "Currencies retrieved successfully.",
+                "results": response.data
+            })
+        return response
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        if response.status_code == status.HTTP_201_CREATED:
+            return Response({
+                "detail": "Currency created successfully.",
+                "currency": response.data
+            }, status=status.HTTP_201_CREATED)
+        return response
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            return Response({
+                "detail": "Currency updated successfully.",
+                "currency": response.data
+            })
+        return response
+
+    def destroy(self, request, *args, **kwargs):
+        response = super().destroy(request, *args, **kwargs)
+        if response.status_code == status.HTTP_204_NO_CONTENT:
+            return Response({
+                "detail": "Currency deleted successfully."
+            }, status=status.HTTP_200_OK)
+        return response
+
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Get only active currencies"""
+        currencies = Currency.objects.filter(is_active=True).order_by('code')
+        serializer = CurrencyListSerializer(currencies, many=True)
+        return Response({
+            "detail": "Active currencies retrieved successfully.",
+            "results": serializer.data
+        })
+
+
+class LineOfBusinessViewSet(viewsets.ModelViewSet):
+    queryset = LineOfBusiness.objects.all()
+    serializer_class = LineOfBusinessSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['batch_model', 'insurance_type', 'currency', 'is_active']
+    search_fields = ['line_of_business', 'batch_model', 'insurance_type']
+    ordering_fields = ['created_on', 'modified_on', 'batch_model', 'insurance_type', 'line_of_business']
+    ordering = ['batch_model', 'insurance_type', 'line_of_business']
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return LineOfBusinessListSerializer
+        elif self.action == 'create':
+            return LineOfBusinessCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return LineOfBusinessUpdateSerializer
+        return LineOfBusinessSerializer
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            return Response({
+                "detail": "Lines of business retrieved successfully.",
+                "results": response.data
+            })
+        return response
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        if response.status_code == status.HTTP_201_CREATED:
+            return Response({
+                "detail": "Line of business created successfully.",
+                "line_of_business": response.data
+            }, status=status.HTTP_201_CREATED)
+        return response
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            return Response({
+                "detail": "Line of business updated successfully.",
+                "line_of_business": response.data
+            })
+        return response
+
+    def destroy(self, request, *args, **kwargs):
+        response = super().destroy(request, *args, **kwargs)
+        if response.status_code == status.HTTP_204_NO_CONTENT:
+            return Response({
+                "detail": "Line of business deleted successfully."
+            }, status=status.HTTP_200_OK)
+        return response
+
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Get only active lines of business"""
+        lines_of_business = LineOfBusiness.objects.filter(is_active=True).order_by('batch_model', 'insurance_type', 'line_of_business')
+        serializer = LineOfBusinessListSerializer(lines_of_business, many=True)
+        return Response({
+            "detail": "Active lines of business retrieved successfully.",
+            "results": serializer.data
+        })
+
+    @action(detail=False, methods=['get'])
+    def by_model_and_type(self, request):
+        """Get lines of business filtered by batch model and insurance type"""
+        batch_model = request.query_params.get('batch_model')
+        insurance_type = request.query_params.get('insurance_type')
+        
+        queryset = LineOfBusiness.objects.filter(is_active=True)
+        
+        if batch_model:
+            queryset = queryset.filter(batch_model=batch_model)
+        if insurance_type:
+            queryset = queryset.filter(insurance_type=insurance_type)
+        
+        queryset = queryset.order_by('line_of_business')
+        serializer = LineOfBusinessListSerializer(queryset, many=True)
+        
+        return Response({
+            "detail": "Lines of business filtered successfully.",
+            "results": serializer.data
+        })

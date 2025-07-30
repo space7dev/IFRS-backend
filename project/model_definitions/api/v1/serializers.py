@@ -1,3 +1,4 @@
+import os
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from drf_yasg.utils import swagger_auto_schema
@@ -6,7 +7,7 @@ from drf_yasg import openapi
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness
 
 User = get_user_model()
 
@@ -921,34 +922,203 @@ class ConversionConfigUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConversionConfig
         fields = [
+            'id',
             'batch_type',
-            'batch_model',
+            'batch_model', 
             'insurance_type',
             'engine_type',
             'required',
             'script',
         ]
+        read_only_fields = ['id']
     
     def validate_script(self, value):
-        if value and value.size > 10 * 1024 * 1024:
-            raise ValidationError("Script file size cannot exceed 10MB")
-        
-        if value and not value.name.endswith('.py'):
-            raise ValidationError("Only Python files (.py) are allowed")
+        if value:
+            allowed_extensions = ['.py']
+            file_extension = os.path.splitext(value.name)[1].lower()
+            if file_extension not in allowed_extensions:
+                raise ValidationError(f"Only Python files (.py) are allowed. Got: {file_extension}")
+            
+            if value.size > 5 * 1024 * 1024:
+                raise ValidationError("File size must be less than 5MB")
         
         return value
     
     def validate(self, data):
-        instance = self.instance
+        batch_type = data.get('batch_type')
+        batch_model = data.get('batch_model')
+        insurance_type = data.get('insurance_type')
+        engine_type = data.get('engine_type')
         
-        existing = ConversionConfig.objects.filter(
-            batch_type=data.get('batch_type', instance.batch_type),
-            batch_model=data.get('batch_model', instance.batch_model),
-            insurance_type=data.get('insurance_type', instance.insurance_type),
-            engine_type=data.get('engine_type', instance.engine_type)
-        ).exclude(pk=instance.pk).exists()
+        if all([batch_type, batch_model, insurance_type, engine_type]):
+            existing = ConversionConfig.objects.filter(
+                batch_type=batch_type,
+                batch_model=batch_model,
+                insurance_type=insurance_type,
+                engine_type=engine_type
+            ).exclude(id=self.instance.id if self.instance else None)
+            
+            if existing.exists():
+                raise ValidationError(
+                    f"A conversion configuration already exists for {batch_type} - {batch_model} - {insurance_type} - {engine_type}"
+                )
         
-        if existing:
-            raise ValidationError("This conversion configuration already exists.")
+        return data
+
+
+class CurrencySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Currency
+        fields = [
+            'id',
+            'code',
+            'name',
+            'is_active',
+            'created_on',
+            'modified_on',
+        ]
+        read_only_fields = ['id', 'created_on', 'modified_on']
+
+
+class CurrencyListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Currency
+        fields = [
+            'id',
+            'code',
+            'name',
+            'is_active',
+        ]
+        read_only_fields = ['id']
+
+
+class CurrencyCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Currency
+        fields = [
+            'code',
+            'name',
+            'is_active',
+        ]
+    
+    def validate_code(self, value):
+        if not value.isalpha() or len(value) != 3:
+            raise ValidationError("Currency code must be exactly 3 alphabetic characters")
+        return value.upper()
+
+
+class CurrencyUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Currency
+        fields = [
+            'code',
+            'name',
+            'is_active',
+        ]
+    
+    def validate_code(self, value):
+        if not value.isalpha() or len(value) != 3:
+            raise ValidationError("Currency code must be exactly 3 alphabetic characters")
+        return value.upper()
+
+
+class LineOfBusinessSerializer(serializers.ModelSerializer):
+    currency_code = serializers.CharField(source='currency.code', read_only=True)
+    currency_name = serializers.CharField(source='currency.name', read_only=True)
+    
+    class Meta:
+        model = LineOfBusiness
+        fields = [
+            'id',
+            'batch_model',
+            'insurance_type',
+            'line_of_business',
+            'currency',
+            'currency_code',
+            'currency_name',
+            'is_active',
+            'created_on',
+            'modified_on',
+        ]
+        read_only_fields = ['id', 'created_on', 'modified_on']
+
+
+class LineOfBusinessListSerializer(serializers.ModelSerializer):
+    currency_code = serializers.CharField(source='currency.code', read_only=True)
+    currency_name = serializers.CharField(source='currency.name', read_only=True)
+    
+    class Meta:
+        model = LineOfBusiness
+        fields = [
+            'id',
+            'batch_model',
+            'insurance_type',
+            'line_of_business',
+            'currency',
+            'currency_code',
+            'currency_name',
+            'is_active',
+        ]
+        read_only_fields = ['id']
+
+
+class LineOfBusinessCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LineOfBusiness
+        fields = [
+            'batch_model',
+            'insurance_type',
+            'line_of_business',
+            'currency',
+            'is_active',
+        ]
+    
+    def validate(self, data):
+        batch_model = data.get('batch_model')
+        insurance_type = data.get('insurance_type')
+        line_of_business = data.get('line_of_business')
+        
+        if all([batch_model, insurance_type, line_of_business]):
+            existing = LineOfBusiness.objects.filter(
+                batch_model=batch_model,
+                insurance_type=insurance_type,
+                line_of_business=line_of_business
+            )
+            
+            if existing.exists():
+                raise ValidationError(
+                    f"A line of business already exists for {batch_model} - {insurance_type} - {line_of_business}"
+                )
+        
+        return data
+
+
+class LineOfBusinessUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LineOfBusiness
+        fields = [
+            'batch_model',
+            'insurance_type',
+            'line_of_business',
+            'currency',
+            'is_active',
+        ]
+    
+    def validate(self, data):
+        batch_model = data.get('batch_model')
+        insurance_type = data.get('insurance_type')
+        line_of_business = data.get('line_of_business')
+        
+        if all([batch_model, insurance_type, line_of_business]):
+            existing = LineOfBusiness.objects.filter(
+                batch_model=batch_model,
+                insurance_type=insurance_type,
+                line_of_business=line_of_business
+            ).exclude(id=self.instance.id if self.instance else None)
+            
+            if existing.exists():
+                raise ValidationError(
+                    f"A line of business already exists for {batch_model} - {insurance_type} - {line_of_business}"
+                )
         
         return data 

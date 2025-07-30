@@ -634,3 +634,75 @@ class ConversionConfig(TimeStampedMixin):
     def __str__(self):
         return f"{self.batch_type} - {self.batch_model} - {self.insurance_type} - {self.engine_type}"
 
+
+class Currency(TimeStampedMixin):
+    code = models.CharField(
+        max_length=3, 
+        unique=True,
+        help_text="3-letter currency code (e.g., USD, EUR, GBP)"
+    )
+    name = models.CharField(
+        max_length=100,
+        help_text="Full currency name (e.g., United States Dollar)"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this currency is available for selection"
+    )
+    
+    class Meta:
+        ordering = ['code']
+        verbose_name = 'Currency'
+        verbose_name_plural = 'Currencies'
+    
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+
+class LineOfBusiness(TimeStampedMixin):
+    BATCH_MODEL_CHOICES = [
+        ('PAA', 'PAA'),
+        ('GMM', 'GMM'),
+        ('VFA', 'VFA'),
+    ]
+    
+    INSURANCE_TYPE_CHOICES = [
+        ('direct', 'Direct'),
+        ('reinsurance', 'Reinsurance'),
+        ('group', 'Group'),
+    ]
+    
+    batch_model = models.CharField(
+        max_length=10,
+        choices=BATCH_MODEL_CHOICES,
+        help_text="PAA, GMM, VFA"
+    )
+    insurance_type = models.CharField(
+        max_length=50,
+        choices=INSURANCE_TYPE_CHOICES,
+        help_text="Direct, Reinsurance, Group"
+    )
+    line_of_business = models.CharField(
+        max_length=200,
+        help_text="Line of business name (e.g., Term Life Insurance, Auto Insurance)"
+    )
+    currency = models.ForeignKey(
+        Currency,
+        on_delete=models.CASCADE,
+        related_name='line_of_businesses',
+        help_text="Currency for this line of business"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this line of business is active"
+    )
+    
+    class Meta:
+        ordering = ['batch_model', 'insurance_type', 'line_of_business']
+        verbose_name = 'Line of Business'
+        verbose_name_plural = 'Lines of Business'
+        unique_together = ['batch_model', 'insurance_type', 'line_of_business']
+    
+    def __str__(self):
+        return f"{self.batch_model} - {self.insurance_type} - {self.line_of_business}"
+
