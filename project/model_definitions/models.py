@@ -706,3 +706,88 @@ class LineOfBusiness(TimeStampedMixin):
     def __str__(self):
         return f"{self.batch_model} - {self.insurance_type} - {self.line_of_business}"
 
+
+class ReportType(TimeStampedMixin):
+    BATCH_MODEL_CHOICES = [
+        ('PAA', 'PAA'),
+        ('GMM', 'GMM'),
+        ('VFA', 'VFA'),
+    ]
+    
+    REPORT_TYPE_CHOICES = [
+        ('lrc_movement_report', 'LRC Movement Report'),
+        ('lic_movement_report', 'LIC Movement Report'),
+        ('insurance_revenue_expense_report', 'Insurance Revenue and Expense Report'),
+        ('disclosure_report', 'Disclosure Report (DR)'),
+        ('financial_statement_items_report', 'Financial Statement Items (FSI) Report'),
+        ('coverage_units_report', 'Coverage Units Report'),
+        ('premium_allocation_reconciliation', 'Premium Allocation Reconciliation'),
+        ('loss_component_report', 'Loss Component Report'),
+        ('discount_rate_reconciliation', 'Discount Rate Reconciliation'),
+        ('experience_adjustment_report', 'Experience Adjustment Report'),
+        ('reinsurance_report', 'Reinsurance Report'),
+        ('underlying_assumption_summary', 'Underlying Assumption Summary'),
+        ('reconciliation_to_gaap_report', 'Reconciliation to GAAP Report'),
+        
+        ('csm_rollforward_report', 'CSM Rollforward Report'),
+        ('risk_adjustment_rollforward', 'Risk Adjustment Rollforward'),
+        ('csm_sensitivity_report', 'CSM Sensitivity Report'),
+        
+    ]
+    
+    batch_model = models.CharField(
+        max_length=10,
+        choices=BATCH_MODEL_CHOICES,
+        help_text="PAA, GMM, VFA"
+    )
+    report_type = models.CharField(
+        max_length=100,
+        choices=REPORT_TYPE_CHOICES,
+        help_text="Type of report"
+    )
+    is_enabled = models.BooleanField(
+        default=True,
+        help_text="Whether this report type is enabled"
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Additional notes about this report type"
+    )
+    
+    class Meta:
+        ordering = ['batch_model', 'report_type']
+        verbose_name = 'Report Type'
+        verbose_name_plural = 'Report Types'
+        unique_together = ['batch_model', 'report_type']
+    
+    def __str__(self):
+        return f"{self.batch_model} - {self.get_report_type_display()}"
+    
+    def get_default_notes(self):
+        notes_map = {
+            'lrc_movement_report': 'Tracks opening balance, premiums, acquisition cash flows, revenue, loss component...',
+            'lic_movement_report': 'Tracks claims paid, changes in estimates, and closing LIC.',
+            'insurance_revenue_expense_report': 'Summarizes recognized insurance revenue and incurred claims/expenses.',
+            'disclosure_report': 'Flexible format for publishing required financial disclosures.',
+            'financial_statement_items_report': 'Aggregates required values for P&L and Balance Sheet.',
+            'coverage_units_report': 'Provides units used to allocate revenue over time.',
+            'premium_allocation_reconciliation': 'PAA-specific; reconciles premiums written, earned, deferred, etc.',
+            'loss_component_report': 'Details creation and reversal of loss component (onerous contracts).',
+            'discount_rate_reconciliation': 'Shows impact of opening/closing discount rates on balances.',
+            'experience_adjustment_report': 'Compares actual claims and premiums vs expected.',
+            'reinsurance_report': 'Mirror of direct reports, adjusted for reinsurance recoverables.',
+            'underlying_assumption_summary': 'Documents key assumptions and methods used.',
+            'reconciliation_to_gaap_report': 'Optional; bridges IFRS 17 figures to local GAAP.',
+            
+            'csm_rollforward_report': 'Mandatory; details CSM opening, new business, changes, and release.',
+            'risk_adjustment_rollforward': 'Required if RA is material; tracks RA changes.',
+            'csm_sensitivity_report': 'For stress testing and sensitivity disclosures.',
+            
+        }
+        return notes_map.get(self.report_type, '')
+    
+    def save(self, *args, **kwargs):
+        if not self.notes:
+            self.notes = self.get_default_notes()
+        super().save(*args, **kwargs)
+

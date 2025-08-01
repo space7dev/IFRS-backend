@@ -7,7 +7,21 @@ from drf_yasg import openapi
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness
+from model_definitions.models import (
+    ModelDefinition, 
+    ModelDefinitionHistory, 
+    DataUploadBatch, 
+    DataBatchStatus, 
+    DataUploadTemplate, 
+    DataUpload, 
+    APIUploadLog,
+    DocumentTypeConfig,
+    CalculationConfig,
+    ConversionConfig,
+    Currency,
+    LineOfBusiness,
+    ReportType
+)
 
 User = get_user_model()
 
@@ -1122,3 +1136,28 @@ class LineOfBusinessUpdateSerializer(serializers.ModelSerializer):
                 )
         
         return data 
+
+class ReportTypeSerializer(serializers.ModelSerializer):
+    report_type_display = serializers.CharField(source='get_report_type_display', read_only=True)
+    batch_model_display = serializers.CharField(source='get_batch_model_display', read_only=True)
+
+    class Meta:
+        model = ReportType
+        fields = '__all__'
+
+
+class ReportTypeCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReportType
+        fields = ['batch_model', 'report_type', 'is_enabled', 'notes']
+
+
+class ReportTypeUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReportType
+        fields = ['batch_model', 'report_type', 'is_enabled', 'notes']
+        
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name, field in self.fields.items():
+            field.required = False 

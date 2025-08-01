@@ -14,7 +14,8 @@ from .views import (
     CalculationConfigViewSet,
     ConversionConfigViewSet,
     CurrencyViewSet,
-    LineOfBusinessViewSet
+    LineOfBusinessViewSet,
+    ReportTypeViewSet
 )
 
 router = routers.SimpleRouter()
@@ -30,6 +31,7 @@ router.register(r"calculation-config", CalculationConfigViewSet, basename="calcu
 router.register(r"conversion-config", ConversionConfigViewSet, basename="conversion-config")
 router.register(r"currencies", CurrencyViewSet, basename="currency")
 router.register(r"line-of-business", LineOfBusinessViewSet, basename="line-of-business")
+router.register(r"report-types", ReportTypeViewSet, basename="report-type")
 router.register(r"", ModelDefinitionViewSet, basename="model-definition")
 
 api_patterns = router.urls 

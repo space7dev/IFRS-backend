@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.db import transaction
 from django.http import HttpResponse, Http404
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType
 from .serializers import (
     ModelDefinitionListSerializer,
     ModelDefinitionDetailSerializer,
@@ -43,7 +43,10 @@ from .serializers import (
     LineOfBusinessSerializer,
     LineOfBusinessListSerializer,
     LineOfBusinessCreateSerializer,
-    LineOfBusinessUpdateSerializer
+    LineOfBusinessUpdateSerializer,
+    ReportTypeSerializer,
+    ReportTypeCreateSerializer,
+    ReportTypeUpdateSerializer
 )
 
 
@@ -1010,3 +1013,35 @@ class LineOfBusinessViewSet(viewsets.ModelViewSet):
             "detail": "Lines of business filtered successfully.",
             "results": serializer.data
         })
+
+class ReportTypeViewSet(viewsets.ModelViewSet):
+    queryset = ReportType.objects.all()
+    serializer_class = ReportTypeSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['batch_model', 'is_enabled']
+    search_fields = ['report_type']
+    ordering_fields = ['batch_model', 'report_type', 'created_on']
+    ordering = ['batch_model', 'report_type']
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return ReportTypeCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return ReportTypeUpdateSerializer
+        return ReportTypeSerializer
+
+    @action(detail=False, methods=['get'])
+    def by_model(self, request):
+        batch_model = request.query_params.get('batch_model')
+        if batch_model:
+            queryset = ReportType.objects.filter(batch_model=batch_model)
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+        return Response({'error': 'batch_model parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'])
+    def enabled(self, request):
+        enabled_reports = ReportType.objects.filter(is_enabled=True)
+        serializer = self.get_serializer(enabled_reports, many=True)
+        return Response(serializer.data)

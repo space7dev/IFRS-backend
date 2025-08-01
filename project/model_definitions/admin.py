@@ -1,6 +1,19 @@
 from django.contrib import admin
-from .models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness
-
+from .models import (
+    ModelDefinition, 
+    ModelDefinitionHistory, 
+    DataUploadBatch, 
+    DataBatchStatus, 
+    DataUploadTemplate, 
+    DataUpload, 
+    APIUploadLog,
+    DocumentTypeConfig,
+    CalculationConfig,
+    ConversionConfig,
+    Currency,
+    LineOfBusiness,
+    ReportType
+)
 
 @admin.register(ModelDefinition)
 class ModelDefinitionAdmin(admin.ModelAdmin):
@@ -370,3 +383,12 @@ class LineOfBusinessAdmin(admin.ModelAdmin):
     
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+
+
+@admin.register(ReportType)
+class ReportTypeAdmin(admin.ModelAdmin):
+    list_display = ['batch_model', 'report_type', 'is_enabled', 'created_on']
+    list_filter = ['batch_model', 'is_enabled', 'created_on']
+    search_fields = ['report_type']
+    readonly_fields = ['created_on', 'modified_on']
+    list_editable = ['is_enabled']
