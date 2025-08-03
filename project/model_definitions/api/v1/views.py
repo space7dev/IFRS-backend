@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.db import transaction
 from django.http import HttpResponse, Http404
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType, IFRSEngineResult
 from .serializers import (
     ModelDefinitionListSerializer,
     ModelDefinitionDetailSerializer,
@@ -46,7 +46,10 @@ from .serializers import (
     LineOfBusinessUpdateSerializer,
     ReportTypeSerializer,
     ReportTypeCreateSerializer,
-    ReportTypeUpdateSerializer
+    ReportTypeUpdateSerializer,
+    IFRSEngineResultSerializer,
+    IFRSEngineResultCreateSerializer,
+    ReportGenerationSerializer
 )
 
 
@@ -1045,3 +1048,109 @@ class ReportTypeViewSet(viewsets.ModelViewSet):
         enabled_reports = ReportType.objects.filter(is_enabled=True)
         serializer = self.get_serializer(enabled_reports, many=True)
         return Response(serializer.data)
+
+
+class IFRSEngineResultViewSet(viewsets.ModelViewSet):
+    queryset = IFRSEngineResult.objects.all()
+    serializer_class = IFRSEngineResultSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['model_type', 'report_type', 'year', 'quarter', 'lob', 'created_by', 'status']
+    search_fields = ['model_guid', 'report_type', 'lob']
+    ordering_fields = ['created_at', 'model_type', 'report_type', 'year', 'quarter']
+    ordering = ['-created_at']
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return IFRSEngineResultCreateSerializer
+        return IFRSEngineResultSerializer
+
+    def perform_create(self, serializer):
+        username = self.request.user.username if self.request.user else 'system'
+        serializer.save(created_by=username)
+
+    @action(detail=True, methods=['get'])
+    def download_pdf(self, request, pk=None):
+        result = self.get_object()
+        return Response({
+            'message': 'PDF generation not implemented yet',
+            'result_id': result.id,
+            'report_type': result.report_type
+        })
+
+    @action(detail=True, methods=['get'])
+    def download_excel(self, request, pk=None):
+        result = self.get_object()
+        return Response({
+            'message': 'Excel generation not implemented yet',
+            'result_id': result.id,
+            'report_type': result.report_type
+        })
+
+    @action(detail=False, methods=['post'])
+    def generate(self, request):
+        serializer = ReportGenerationSerializer(data=request.data)
+        if serializer.is_valid():
+            data = serializer.validated_data
+            
+            try:
+                model = ModelDefinition.objects.get(id=data['model_id'])
+            except ModelDefinition.DoesNotExist:
+                return Response({'error': 'Model not found'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            batches = DataUploadBatch.objects.filter(
+                id__in=data['batch_ids'],
+                batch_status='completed'
+            )
+            if not batches.exists():
+                return Response({'error': 'No completed batches found'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            line_of_businesses = LineOfBusiness.objects.filter(
+                id__in=data['line_of_business_ids'],
+                batch_model=data['model_type']
+            )
+            if not line_of_businesses.exists():
+                return Response({'error': 'No line of businesses found'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                ifrs_engine = CalculationConfig.objects.get(id=data['ifrs_engine_id'])
+            except CalculationConfig.DoesNotExist:
+                return Response({'error': 'IFRS engine not found'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            report_types = ReportType.objects.filter(
+                id__in=data['report_type_ids'],
+                batch_model=data['model_type'],
+                is_enabled=True
+            )
+            if not report_types.exists():
+                return Response({'error': 'No enabled report types found'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            results = []
+            
+            with transaction.atomic():
+                for batch in batches:
+                    for lob in line_of_businesses:
+                        for report_type in report_types:
+                            result = IFRSEngineResult.objects.create(
+                                model_guid=model.id,  # Using model ID as UUID
+                                model_type=data['model_type'],
+                                report_type=report_type.report_type,
+                                year=batch.batch_year,
+                                quarter=batch.batch_quarter,
+                                lob=lob.line_of_business,
+                                currency=lob.currency,
+                                status='Success',  # Default to Success
+                                result_json={'message': 'Report generated successfully', 'batch_id': batch.id},
+                                created_by=request.user.username if request.user else 'system'
+                            )
+                            results.append(result)
+            
+            result_serializer = IFRSEngineResultSerializer(results, many=True, context={'request': request})
+            
+            return Response({
+                'detail': 'Reports generated successfully',
+                'results': result_serializer.data,
+                'count': len(results)
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

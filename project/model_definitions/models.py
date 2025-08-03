@@ -791,3 +791,90 @@ class ReportType(TimeStampedMixin):
             self.notes = self.get_default_notes()
         super().save(*args, **kwargs)
 
+
+class IFRSEngineResult(models.Model):
+    STATUS_CHOICES = [
+        ('Success', 'Success'),
+        ('Error', 'Error'),
+    ]
+    
+    BATCH_MODEL_CHOICES = [
+        ('PAA', 'PAA'),
+        ('GMM', 'GMM'),
+        ('VFA', 'VFA'),
+    ]
+    
+    QUARTER_CHOICES = [
+        ('Q1', 'Q1'),
+        ('Q2', 'Q2'),
+        ('Q3', 'Q3'),
+        ('Q4', 'Q4'),
+    ]
+    
+    model_guid = models.UUIDField(
+        help_text="Reference to model run"
+    )
+    model_type = models.CharField(
+        max_length=10,
+        choices=BATCH_MODEL_CHOICES,
+        help_text="PAA, GMM, VFA"
+    )
+    report_type = models.CharField(
+        max_length=50,
+        help_text="e.g., LRC_Movement, LIC_Movement, DR_LRC"
+    )
+    year = models.IntegerField(
+        help_text="Reporting year"
+    )
+    quarter = models.CharField(
+        max_length=2,
+        choices=QUARTER_CHOICES,
+        help_text="Reporting quarter"
+    )
+    lob = models.CharField(
+        max_length=100,
+        help_text="Line of Business"
+    )
+    currency = models.CharField(
+        max_length=10,
+        blank=True,
+        null=True,
+        help_text="Currency code"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        help_text="Success or Error"
+    )
+    result_json = models.JSONField(
+        help_text="Output or error message"
+    )
+    created_by = models.CharField(
+        max_length=100,
+        help_text="Username or system"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Insert timestamp"
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'IFRS Engine Result'
+        verbose_name_plural = 'IFRS Engine Results'
+        indexes = [
+            models.Index(fields=['model_type', 'report_type']),
+            models.Index(fields=['year', 'quarter']),
+            models.Index(fields=['created_by']),
+        ]
+        db_table = 'ifrs_engine_results'
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(status__in=['Success', 'Error']),
+                name='status_check'
+            )
+        ]
+    
+    def __str__(self):
+        return f"{self.model_type} - {self.report_type} - {self.year} {self.quarter} - {self.lob}"
+

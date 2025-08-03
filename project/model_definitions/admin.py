@@ -12,7 +12,8 @@ from .models import (
     ConversionConfig,
     Currency,
     LineOfBusiness,
-    ReportType
+    ReportType,
+    IFRSEngineResult
 )
 
 @admin.register(ModelDefinition)
@@ -392,3 +393,27 @@ class ReportTypeAdmin(admin.ModelAdmin):
     search_fields = ['report_type']
     readonly_fields = ['created_on', 'modified_on']
     list_editable = ['is_enabled']
+
+
+@admin.register(IFRSEngineResult)
+class IFRSEngineResultAdmin(admin.ModelAdmin):
+    list_display = ['model_guid', 'model_type', 'report_type', 'year', 'quarter', 'lob', 'status', 'created_by', 'created_at']
+    list_filter = ['model_type', 'report_type', 'year', 'quarter', 'status', 'created_at']
+    search_fields = ['model_guid', 'report_type', 'lob', 'created_by']
+    readonly_fields = ['created_at']
+    
+    fieldsets = [
+        ('Report Information', {
+            'fields': ['model_guid', 'model_type', 'report_type', 'status']
+        }),
+        ('Reporting Period', {
+            'fields': ['year', 'quarter', 'lob', 'currency']
+        }),
+        ('Result Data', {
+            'fields': ['result_json']
+        }),
+        ('Metadata', {
+            'fields': ['created_by', 'created_at'],
+            'classes': ['collapse']
+        })
+    ]

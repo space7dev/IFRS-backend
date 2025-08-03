@@ -20,7 +20,8 @@ from model_definitions.models import (
     ConversionConfig,
     Currency,
     LineOfBusiness,
-    ReportType
+    ReportType,
+    IFRSEngineResult
 )
 
 User = get_user_model()
@@ -1160,4 +1161,57 @@ class ReportTypeUpdateSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field_name, field in self.fields.items():
-            field.required = False 
+            field.required = False
+
+
+class IFRSEngineResultSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IFRSEngineResult
+        fields = [
+            'id',
+            'model_guid',
+            'model_type',
+            'report_type',
+            'year',
+            'quarter',
+            'lob',
+            'currency',
+            'status',
+            'result_json',
+            'created_by',
+            'created_at'
+        ]
+
+class IFRSEngineResultCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IFRSEngineResult
+        fields = [
+            'model_guid',
+            'model_type',
+            'report_type',
+            'year',
+            'quarter',
+            'lob',
+            'currency',
+            'status',
+            'result_json',
+            'created_by'
+        ]
+
+
+class ReportGenerationSerializer(serializers.Serializer):
+    model_type = serializers.ChoiceField(choices=['PAA', 'GMM', 'VFA'])
+    model_id = serializers.IntegerField()
+    batch_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        min_length=1
+    )
+    line_of_business_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        min_length=1
+    )
+    ifrs_engine_id = serializers.IntegerField()
+    report_type_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        min_length=1
+    ) 
