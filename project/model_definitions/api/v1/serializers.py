@@ -21,7 +21,8 @@ from model_definitions.models import (
     Currency,
     LineOfBusiness,
     ReportType,
-    IFRSEngineResult
+    IFRSEngineResult,
+    IFRSEngineInput
 )
 
 User = get_user_model()
@@ -1164,11 +1165,27 @@ class ReportTypeUpdateSerializer(serializers.ModelSerializer):
             field.required = False
 
 
+class IFRSEngineInputSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IFRSEngineInput
+        fields = [
+            'id',
+            'run_id',
+            'model_definition',
+            'batch_data',
+            'field_parameters',
+            'created_by',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
 class IFRSEngineResultSerializer(serializers.ModelSerializer):
     class Meta:
         model = IFRSEngineResult
         fields = [
             'id',
+            'run_id',
             'model_guid',
             'model_type',
             'report_type',
@@ -1179,13 +1196,16 @@ class IFRSEngineResultSerializer(serializers.ModelSerializer):
             'status',
             'result_json',
             'created_by',
-            'created_at'
+            'created_at',
         ]
+        read_only_fields = ['id', 'created_at']
+
 
 class IFRSEngineResultCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = IFRSEngineResult
         fields = [
+            'run_id',
             'model_guid',
             'model_type',
             'report_type',

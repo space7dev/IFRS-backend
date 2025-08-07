@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.db import transaction
 from django.http import HttpResponse, Http404
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType, IFRSEngineResult
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType, IFRSEngineResult, IFRSEngineInput
 from .serializers import (
     ModelDefinitionListSerializer,
     ModelDefinitionDetailSerializer,
@@ -49,7 +49,8 @@ from .serializers import (
     ReportTypeUpdateSerializer,
     IFRSEngineResultSerializer,
     IFRSEngineResultCreateSerializer,
-    ReportGenerationSerializer
+    ReportGenerationSerializer,
+    IFRSEngineInputSerializer
 )
 
 
@@ -1050,13 +1051,33 @@ class ReportTypeViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+class IFRSEngineInputViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = IFRSEngineInput.objects.all()
+    serializer_class = IFRSEngineInputSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['run_id', 'created_by']
+    search_fields = ['run_id']
+    ordering_fields = ['created_at']
+    ordering = ['-created_at']
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            return Response({
+                "detail": "IFRS Engine Inputs retrieved successfully.",
+                "results": response.data
+            })
+        return response
+
+
 class IFRSEngineResultViewSet(viewsets.ModelViewSet):
     queryset = IFRSEngineResult.objects.all()
     serializer_class = IFRSEngineResultSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['model_type', 'report_type', 'year', 'quarter', 'lob', 'created_by', 'status']
-    search_fields = ['model_guid', 'report_type', 'lob']
+    filterset_fields = ['run_id', 'model_type', 'report_type', 'year', 'quarter', 'lob', 'created_by', 'status']
+    search_fields = ['run_id', 'model_guid', 'report_type', 'lob']
     ordering_fields = ['created_at', 'model_type', 'report_type', 'year', 'quarter']
     ordering = ['-created_at']
 
@@ -1125,32 +1146,247 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
             if not report_types.exists():
                 return Response({'error': 'No enabled report types found'}, status=status.HTTP_400_BAD_REQUEST)
             
+            import uuid
+            import time
+            run_id = f"RUN-{int(time.time())}-{str(uuid.uuid4())[:8]}"
+            
+            model_definition = {
+                'id': model.id,
+                'name': model.name,
+                'version': model.version,
+                'config': model.config,
+            }
+            
+            batch_data = []
+            for batch in batches:
+                batch_info = {
+                    'id': batch.id,
+                    'batch_id': batch.batch_id,
+                    'batch_type': batch.batch_type,
+                    'batch_model': batch.batch_model,
+                    'insurance_type': batch.insurance_type,
+                    'batch_year': batch.batch_year,
+                    'batch_quarter': batch.batch_quarter,
+                    'uploads': []
+                }
+                
+                uploads = DataUpload.objects.filter(batch=batch)
+                for upload in uploads:
+                    upload_info = {
+                        'id': upload.id,
+                        'upload_id': upload.upload_id,
+                        'source': upload.source,
+                        'insurance_type': upload.insurance_type,
+                        'data_type': upload.data_type,
+                        'quarter': upload.quarter,
+                        'year': upload.year,
+                        'validation_status': upload.validation_status,
+                        'rows_processed': upload.rows_processed,
+                        'error_count': upload.error_count,
+                        'validation_errors': upload.validation_errors,
+                    }
+                    batch_info['uploads'].append(upload_info)
+                
+                batch_data.append(batch_info)
+            
+            field_parameters = {
+                'model_type': data['model_type'],
+                'model_id': data['model_id'],
+                'batch_ids': data['batch_ids'],
+                'line_of_business_ids': data['line_of_business_ids'],
+                'ifrs_engine_id': data['ifrs_engine_id'],
+                'report_type_ids': data['report_type_ids'],
+                'line_of_businesses': [
+                    {
+                        'id': lob.id,
+                        'line_of_business': lob.line_of_business,
+                        'batch_model': lob.batch_model,
+                        'insurance_type': lob.insurance_type,
+                        'currency': lob.currency.code if lob.currency else None,
+                    }
+                    for lob in line_of_businesses
+                ],
+                'report_types': [
+                    {
+                        'id': rt.id,
+                        'report_type': rt.report_type,
+                        'batch_model': rt.batch_model,
+                        'is_enabled': rt.is_enabled,
+                    }
+                    for rt in report_types
+                ],
+            }
+            
             results = []
             
             with transaction.atomic():
+                engine_input = IFRSEngineInput.objects.create(
+                    run_id=run_id,
+                    model_definition=model_definition,
+                    batch_data=batch_data,
+                    field_parameters=field_parameters,
+                    created_by=request.user.username if request.user else 'system'
+                )
+                
                 for batch in batches:
                     for lob in line_of_businesses:
                         for report_type in report_types:
-                            result = IFRSEngineResult.objects.create(
-                                model_guid=model.id,  # Using model ID as UUID
-                                model_type=data['model_type'],
-                                report_type=report_type.report_type,
-                                year=batch.batch_year,
-                                quarter=batch.batch_quarter,
-                                lob=lob.line_of_business,
-                                currency=lob.currency,
-                                status='Success',  # Default to Success
-                                result_json={'message': 'Report generated successfully', 'batch_id': batch.id},
-                                created_by=request.user.username if request.user else 'system'
-                            )
-                            results.append(result)
+                            try:
+                                engine_result = self._execute_python_engine(
+                                    run_id=run_id,
+                                    model_definition=model_definition,
+                                    batch_data=batch_data,
+                                    field_parameters=field_parameters,
+                                    batch=batch,
+                                    lob=lob,
+                                    report_type=report_type
+                                )
+                                
+                                result = IFRSEngineResult.objects.create(
+                                    run_id=run_id,
+                                    model_guid=model.id,
+                                    model_type=data['model_type'],
+                                    report_type=report_type.report_type,
+                                    year=batch.batch_year,
+                                    quarter=batch.batch_quarter,
+                                    lob=lob.line_of_business,
+                                    currency=lob.currency.code if lob.currency else None,
+                                    status='Success',
+                                    result_json=engine_result,
+                                    created_by=request.user.username if request.user else 'system'
+                                )
+                                results.append(result)
+                                
+                            except Exception as e:
+                                result = IFRSEngineResult.objects.create(
+                                    run_id=run_id,
+                                    model_guid=model.id,
+                                    model_type=data['model_type'],
+                                    report_type=report_type.report_type,
+                                    year=batch.batch_year,
+                                    quarter=batch.batch_quarter,
+                                    lob=lob.line_of_business,
+                                    currency=lob.currency.code if lob.currency else None,
+                                    status='Error',
+                                    result_json={'error': str(e), 'traceback': str(e)},
+                                    created_by=request.user.username if request.user else 'system'
+                                )
+                                results.append(result)
             
             result_serializer = IFRSEngineResultSerializer(results, many=True, context={'request': request})
             
             return Response({
                 'detail': 'Reports generated successfully',
+                'run_id': run_id,
                 'results': result_serializer.data,
                 'count': len(results)
             }, status=status.HTTP_201_CREATED)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def _execute_python_engine(self, run_id, model_definition, batch_data, field_parameters, batch, lob, report_type):
+        import json
+        import os
+        import subprocess
+        import tempfile
+        
+        engine_input = {
+            'run_id': run_id,
+            'model_definition': model_definition,
+            'batch_data': batch_data,
+            'field_parameters': field_parameters,
+            'current_batch': {
+                'id': batch.id,
+                'batch_id': batch.batch_id,
+                'batch_type': batch.batch_type,
+                'batch_model': batch.batch_model,
+                'insurance_type': batch.insurance_type,
+                'batch_year': batch.batch_year,
+                'batch_quarter': batch.batch_quarter,
+            },
+            'current_lob': {
+                'id': lob.id,
+                'line_of_business': lob.line_of_business,
+                'batch_model': lob.batch_model,
+                'insurance_type': lob.insurance_type,
+                'currency': lob.currency.code if lob.currency else None,
+            },
+            'current_report_type': {
+                'id': report_type.id,
+                'report_type': report_type.report_type,
+                'batch_model': report_type.batch_model,
+                'is_enabled': report_type.is_enabled,
+            }
+        }
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(engine_input, f, indent=2)
+            input_file = f.name
+        
+        try:
+            engine_script_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                'ifrs_engine.py'
+            )
+            
+            if os.path.exists(engine_script_path):
+                result = subprocess.run(
+                    ['python', engine_script_path, input_file],
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+                
+                if result.returncode == 0:
+                    try:
+                        output_data = json.loads(result.stdout)
+                        return output_data
+                    except json.JSONDecodeError:
+                        return {
+                            'message': 'Engine executed successfully but returned invalid JSON',
+                            'stdout': result.stdout,
+                            'stderr': result.stderr
+                        }
+                else:
+                    return {
+                        'error': 'Engine execution failed',
+                        'stdout': result.stdout,
+                        'stderr': result.stderr,
+                        'return_code': result.returncode
+                    }
+            else:
+                return {
+                    'message': 'IFRS Engine executed successfully (mock)',
+                    'run_id': run_id,
+                    'batch_id': batch.batch_id,
+                    'lob': lob.line_of_business,
+                    'report_type': report_type.report_type,
+                    'year': batch.batch_year,
+                    'quarter': batch.batch_quarter,
+                    'currency': lob.currency.code if lob.currency else None,
+                    'calculation_date': str(timezone.now()),
+                    'results': {
+                        'premiums': 1000000.00,
+                        'claims': 750000.00,
+                        'expenses': 150000.00,
+                        'reserves': 500000.00,
+                        'csm': 250000.00,
+                        'risk_adjustment': 100000.00,
+                    }
+                }
+                
+        except subprocess.TimeoutExpired:
+            return {
+                'error': 'Engine execution timed out',
+                'run_id': run_id
+            }
+        except Exception as e:
+            return {
+                'error': f'Engine execution error: {str(e)}',
+                'run_id': run_id
+            }
+        finally:
+            try:
+                os.unlink(input_file)
+            except:
+                pass

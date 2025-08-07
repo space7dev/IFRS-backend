@@ -16,7 +16,8 @@ from .views import (
     CurrencyViewSet,
     LineOfBusinessViewSet,
     ReportTypeViewSet,
-    IFRSEngineResultViewSet
+    IFRSEngineResultViewSet,
+    IFRSEngineInputViewSet
 )
 
 router = routers.SimpleRouter()
@@ -30,6 +31,7 @@ router.register(r"data-batch-status", DataBatchStatusViewSet, basename="data-bat
 router.register(r"document-type-config", DocumentTypeConfigViewSet, basename="document-type-config")
 router.register(r"calculation-config", CalculationConfigViewSet, basename="calculation-config")
 router.register(r"conversion-config", ConversionConfigViewSet, basename="conversion-config")
+router.register(r'ifrs-engine-inputs', IFRSEngineInputViewSet)
 router.register(r"currencies", CurrencyViewSet, basename="currency")
 router.register(r"line-of-business", LineOfBusinessViewSet, basename="line-of-business")
 router.register(r"report-types", ReportTypeViewSet, basename="report-type")

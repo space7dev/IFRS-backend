@@ -792,6 +792,40 @@ class ReportType(TimeStampedMixin):
         super().save(*args, **kwargs)
 
 
+class IFRSEngineInput(models.Model):
+    run_id = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Unique Run ID for this engine execution"
+    )
+    model_definition = models.JSONField(
+        help_text="JSON model definition data"
+    )
+    batch_data = models.JSONField(
+        help_text="JSON batch data from uploads"
+    )
+    field_parameters = models.JSONField(
+        help_text="JSON field parameters from report generation"
+    )
+    created_by = models.CharField(
+        max_length=100,
+        help_text="Username or system"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Insert timestamp"
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'IFRS Engine Input'
+        verbose_name_plural = 'IFRS Engine Inputs'
+        db_table = 'ifrs_engine_inputs'
+    
+    def __str__(self):
+        return f"Run {self.run_id} - {self.created_at}"
+
+
 class IFRSEngineResult(models.Model):
     STATUS_CHOICES = [
         ('Success', 'Success'),
@@ -811,6 +845,11 @@ class IFRSEngineResult(models.Model):
         ('Q4', 'Q4'),
     ]
     
+    run_id = models.CharField(
+        max_length=50,
+        help_text="Reference to engine run ID",
+        default="LEGACY-RUN"
+    )
     model_guid = models.UUIDField(
         help_text="Reference to model run"
     )
@@ -863,6 +902,7 @@ class IFRSEngineResult(models.Model):
         verbose_name = 'IFRS Engine Result'
         verbose_name_plural = 'IFRS Engine Results'
         indexes = [
+            models.Index(fields=['run_id']),
             models.Index(fields=['model_type', 'report_type']),
             models.Index(fields=['year', 'quarter']),
             models.Index(fields=['created_by']),
