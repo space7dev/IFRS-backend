@@ -83,6 +83,10 @@ class ModelDefinitionViewSet(viewsets.ModelViewSet):
         if product_type:
             queryset = queryset.filter(config__general_info__product_type=product_type)
         
+        status = self.request.query_params.get('status')
+        if status:
+            queryset = queryset.filter(config__general_info__status=status)
+        
         return queryset
 
     def list(self, request, *args, **kwargs):
@@ -1035,20 +1039,35 @@ class ReportTypeViewSet(viewsets.ModelViewSet):
             return ReportTypeUpdateSerializer
         return ReportTypeSerializer
 
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            return Response({
+                "detail": "Report types retrieved successfully.",
+                "results": response.data
+            })
+        return response
+
     @action(detail=False, methods=['get'])
     def by_model(self, request):
         batch_model = request.query_params.get('batch_model')
         if batch_model:
             queryset = ReportType.objects.filter(batch_model=batch_model)
             serializer = self.get_serializer(queryset, many=True)
-            return Response(serializer.data)
+            return Response({
+                "detail": "Report types filtered successfully.",
+                "results": serializer.data
+            })
         return Response({'error': 'batch_model parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['get'])
     def enabled(self, request):
         enabled_reports = ReportType.objects.filter(is_enabled=True)
         serializer = self.get_serializer(enabled_reports, many=True)
-        return Response(serializer.data)
+        return Response({
+            "detail": "Enabled report types retrieved successfully.",
+            "results": serializer.data
+        })
 
 
 class IFRSEngineInputViewSet(viewsets.ReadOnlyModelViewSet):
@@ -1324,14 +1343,36 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
             input_file = f.name
         
         try:
-            engine_script_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                'ifrs_engine.py'
-            )
+            ifrs_engine_id = field_parameters.get('ifrs_engine_id')
+            if not ifrs_engine_id:
+                return {
+                    'error': 'IFRS engine ID not provided in field parameters',
+                    'run_id': run_id
+                }
             
-            if os.path.exists(engine_script_path):
+            try:
+                ifrs_engine = CalculationConfig.objects.get(id=ifrs_engine_id)
+            except CalculationConfig.DoesNotExist:
+                return {
+                    'error': f'IFRS engine with ID {ifrs_engine_id} not found',
+                    'run_id': run_id
+                }
+            
+            if not ifrs_engine.script:
+                return {
+                    'error': f'No script uploaded for engine {ifrs_engine.engine_type}',
+                    'run_id': run_id
+                }
+            
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as script_file:
+                script_content = ifrs_engine.script.read().decode('utf-8')
+                script_file.write(script_content)
+                script_file.flush()
+                script_path = script_file.name
+            
+            try:
                 result = subprocess.run(
-                    ['python', engine_script_path, input_file],
+                    ['python', script_path, input_file],
                     capture_output=True,
                     text=True,
                     timeout=300
@@ -1345,36 +1386,24 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                         return {
                             'message': 'Engine executed successfully but returned invalid JSON',
                             'stdout': result.stdout,
-                            'stderr': result.stderr
+                            'stderr': result.stderr,
+                            'run_id': run_id
                         }
                 else:
                     return {
                         'error': 'Engine execution failed',
                         'stdout': result.stdout,
                         'stderr': result.stderr,
-                        'return_code': result.returncode
+                        'return_code': result.returncode,
+                        'run_id': run_id
                     }
-            else:
-                return {
-                    'message': 'IFRS Engine executed successfully (mock)',
-                    'run_id': run_id,
-                    'batch_id': batch.batch_id,
-                    'lob': lob.line_of_business,
-                    'report_type': report_type.report_type,
-                    'year': batch.batch_year,
-                    'quarter': batch.batch_quarter,
-                    'currency': lob.currency.code if lob.currency else None,
-                    'calculation_date': str(timezone.now()),
-                    'results': {
-                        'premiums': 1000000.00,
-                        'claims': 750000.00,
-                        'expenses': 150000.00,
-                        'reserves': 500000.00,
-                        'csm': 250000.00,
-                        'risk_adjustment': 100000.00,
-                    }
-                }
-                
+                    
+            finally:
+                try:
+                    os.unlink(script_path)
+                except:
+                    pass
+                    
         except subprocess.TimeoutExpired:
             return {
                 'error': 'Engine execution timed out',
