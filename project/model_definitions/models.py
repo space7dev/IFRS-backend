@@ -870,10 +870,7 @@ class IFRSEngineResult(models.Model):
         choices=QUARTER_CHOICES,
         help_text="Reporting quarter"
     )
-    lob = models.CharField(
-        max_length=100,
-        help_text="Line of Business"
-    )
+
     currency = models.CharField(
         max_length=10,
         blank=True,

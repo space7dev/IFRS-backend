@@ -1095,8 +1095,8 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
     serializer_class = IFRSEngineResultSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['run_id', 'model_type', 'report_type', 'year', 'quarter', 'lob', 'created_by', 'status']
-    search_fields = ['run_id', 'model_guid', 'report_type', 'lob']
+    filterset_fields = ['run_id', 'model_type', 'report_type', 'year', 'quarter', 'created_by', 'status']
+    search_fields = ['run_id', 'model_guid', 'report_type']
     ordering_fields = ['created_at', 'model_type', 'report_type', 'year', 'quarter']
     ordering = ['-created_at']
 
@@ -1248,49 +1248,46 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                 )
                 
                 for batch in batches:
-                    for lob in line_of_businesses:
-                        for report_type in report_types:
-                            try:
-                                engine_result = self._execute_python_engine(
-                                    run_id=run_id,
-                                    model_definition=model_definition,
-                                    batch_data=batch_data,
-                                    field_parameters=field_parameters,
-                                    batch=batch,
-                                    lob=lob,
-                                    report_type=report_type
-                                )
-                                
-                                result = IFRSEngineResult.objects.create(
-                                    run_id=run_id,
-                                    model_guid=model.id,
-                                    model_type=data['model_type'],
-                                    report_type=report_type.report_type,
-                                    year=batch.batch_year,
-                                    quarter=batch.batch_quarter,
-                                    lob=lob.line_of_business,
-                                    currency=lob.currency.code if lob.currency else None,
-                                    status='Success',
-                                    result_json=engine_result,
-                                    created_by=request.user.username if request.user else 'system'
-                                )
-                                results.append(result)
-                                
-                            except Exception as e:
-                                result = IFRSEngineResult.objects.create(
-                                    run_id=run_id,
-                                    model_guid=model.id,
-                                    model_type=data['model_type'],
-                                    report_type=report_type.report_type,
-                                    year=batch.batch_year,
-                                    quarter=batch.batch_quarter,
-                                    lob=lob.line_of_business,
-                                    currency=lob.currency.code if lob.currency else None,
-                                    status='Error',
-                                    result_json={'error': str(e), 'traceback': str(e)},
-                                    created_by=request.user.username if request.user else 'system'
-                                )
-                                results.append(result)
+                    for report_type in report_types:
+                        try:
+                            engine_result = self._execute_python_engine(
+                                run_id=run_id,
+                                model_definition=model_definition,
+                                batch_data=batch_data,
+                                field_parameters=field_parameters,
+                                batch=batch,
+                                line_of_businesses=line_of_businesses,
+                                report_type=report_type
+                            )
+                            
+                            result = IFRSEngineResult.objects.create(
+                                run_id=run_id,
+                                model_guid=model.id,
+                                model_type=data['model_type'],
+                                report_type=report_type.report_type,
+                                year=batch.batch_year,
+                                quarter=batch.batch_quarter,
+                                currency=None,
+                                status='Success',
+                                result_json=engine_result,
+                                created_by=request.user.username if request.user else 'system'
+                            )
+                            results.append(result)
+                            
+                        except Exception as e:
+                            result = IFRSEngineResult.objects.create(
+                                run_id=run_id,
+                                model_guid=model.id,
+                                model_type=data['model_type'],
+                                report_type=report_type.report_type,
+                                year=batch.batch_year,
+                                quarter=batch.batch_quarter,
+                                currency=None,
+                                status='Error',
+                                result_json={'error': str(e), 'traceback': str(e)},
+                                created_by=request.user.username if request.user else 'system'
+                            )
+                            results.append(result)
             
             result_serializer = IFRSEngineResultSerializer(results, many=True, context={'request': request})
             
@@ -1303,7 +1300,7 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    def _execute_python_engine(self, run_id, model_definition, batch_data, field_parameters, batch, lob, report_type):
+    def _execute_python_engine(self, run_id, model_definition, batch_data, field_parameters, batch, line_of_businesses, report_type):
         import json
         import os
         import subprocess
@@ -1323,13 +1320,16 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                 'batch_year': batch.batch_year,
                 'batch_quarter': batch.batch_quarter,
             },
-            'current_lob': {
-                'id': lob.id,
-                'line_of_business': lob.line_of_business,
-                'batch_model': lob.batch_model,
-                'insurance_type': lob.insurance_type,
-                'currency': lob.currency.code if lob.currency else None,
-            },
+            'line_of_businesses': [
+                {
+                    'id': lob.id,
+                    'line_of_business': lob.line_of_business,
+                    'batch_model': lob.batch_model,
+                    'insurance_type': lob.insurance_type,
+                    'currency': lob.currency.code if lob.currency else None,
+                }
+                for lob in line_of_businesses
+            ],
             'current_report_type': {
                 'id': report_type.id,
                 'report_type': report_type.report_type,

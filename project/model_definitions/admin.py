@@ -397,17 +397,17 @@ class ReportTypeAdmin(admin.ModelAdmin):
 
 @admin.register(IFRSEngineResult)
 class IFRSEngineResultAdmin(admin.ModelAdmin):
-    list_display = ['model_guid', 'model_type', 'report_type', 'year', 'quarter', 'lob', 'status', 'created_by', 'created_at']
+    list_display = ['run_id', 'model_guid', 'model_type', 'report_type', 'year', 'quarter', 'status', 'created_by', 'created_at']
     list_filter = ['model_type', 'report_type', 'year', 'quarter', 'status', 'created_at']
-    search_fields = ['model_guid', 'report_type', 'lob', 'created_by']
+    search_fields = ['run_id', 'model_guid', 'report_type', 'created_by']
     readonly_fields = ['created_at']
     
     fieldsets = [
         ('Report Information', {
-            'fields': ['model_guid', 'model_type', 'report_type', 'status']
+            'fields': ['run_id', 'model_guid', 'model_type', 'report_type', 'status']
         }),
         ('Reporting Period', {
-            'fields': ['year', 'quarter', 'lob', 'currency']
+            'fields': ['year', 'quarter', 'currency']
         }),
         ('Result Data', {
             'fields': ['result_json']
