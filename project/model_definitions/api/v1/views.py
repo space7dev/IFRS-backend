@@ -1127,6 +1127,19 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
             'report_type': result.report_type
         })
 
+    def destroy(self, request, *args, **kwargs):
+        """Delete an IFRS engine result"""
+        try:
+            result = self.get_object()
+            result.delete()
+            return Response({
+                'detail': 'IFRS engine result deleted successfully'
+            }, status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response({
+                'error': f'Failed to delete IFRS engine result: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
     @action(detail=False, methods=['post'])
     def generate(self, request):
         serializer = ReportGenerationSerializer(data=request.data)
@@ -1167,7 +1180,14 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
             
             import uuid
             import time
-            run_id = f"RUN-{int(time.time())}-{str(uuid.uuid4())[:8]}"
+            import random
+            import string
+            
+            # Generate 3 random letters
+            letters = ''.join(random.choices(string.ascii_uppercase, k=3))
+            # Generate 8 random digits
+            numbers = ''.join(random.choices(string.digits, k=8))
+            run_id = f"RUN-{letters}{numbers}"
             
             model_definition = {
                 'id': model.id,
@@ -1212,6 +1232,8 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                 'model_type': data['model_type'],
                 'model_id': data['model_id'],
                 'batch_ids': data['batch_ids'],
+                'year': data['year'],
+                'quarter': data['quarter'],
                 'line_of_business_ids': data['line_of_business_ids'],
                 'ifrs_engine_id': data['ifrs_engine_id'],
                 'report_type_ids': data['report_type_ids'],
@@ -1265,8 +1287,8 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                                 model_guid=model.id,
                                 model_type=data['model_type'],
                                 report_type=report_type.report_type,
-                                year=batch.batch_year,
-                                quarter=batch.batch_quarter,
+                                year=data['year'],
+                                quarter=data['quarter'],
                                 currency=None,
                                 status='Success',
                                 result_json=engine_result,
@@ -1280,8 +1302,8 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                                 model_guid=model.id,
                                 model_type=data['model_type'],
                                 report_type=report_type.report_type,
-                                year=batch.batch_year,
-                                quarter=batch.batch_quarter,
+                                year=data['year'],
+                                quarter=data['quarter'],
                                 currency=None,
                                 status='Error',
                                 result_json={'error': str(e), 'traceback': str(e)},

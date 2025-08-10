@@ -21,6 +21,7 @@ class Command(BaseCommand):
             ('ZAR', 'South African Rand'),
             ('INR', 'Indian Rupee'),
             ('BRL', 'Brazilian Real'),
+            ('BSD', 'Bahamian Dollar'),
             ('MXN', 'Mexican Peso'),
             ('NOK', 'Norwegian Krone'),
             ('SEK', 'Swedish Krona'),

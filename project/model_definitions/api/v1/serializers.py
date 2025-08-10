@@ -1224,6 +1224,8 @@ class ReportGenerationSerializer(serializers.Serializer):
         child=serializers.IntegerField(),
         min_length=1
     )
+    year = serializers.IntegerField()
+    quarter = serializers.ChoiceField(choices=['Q1', 'Q2', 'Q3', 'Q4'])
     line_of_business_ids = serializers.ListField(
         child=serializers.IntegerField(),
         min_length=1
