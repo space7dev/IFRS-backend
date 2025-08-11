@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.pagination import PageNumberPagination
 
 from django.utils import timezone
 from django.db import transaction
@@ -1099,6 +1100,7 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
     search_fields = ['run_id', 'model_guid', 'report_type']
     ordering_fields = ['created_at', 'model_type', 'report_type', 'year', 'quarter']
     ordering = ['-created_at']
+    pagination_class = PageNumberPagination
 
     def get_serializer_class(self):
         if self.action == 'create':
