@@ -1137,21 +1137,186 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def download_pdf(self, request, pk=None):
-        result = self.get_object()
-        return Response({
-            'message': 'PDF generation not implemented yet',
-            'result_id': result.id,
-            'report_type': result.report_type
-        })
+        """Download IFRS engine result as PDF"""
+        try:
+            result = self.get_object()
+            
+            if result.status != 'Success':
+                return Response({
+                    'error': 'Cannot generate PDF for failed report'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Import required libraries
+            from fpdf import FPDF
+            import json
+            from datetime import datetime
+            
+            # Create PDF
+            pdf = FPDF()
+            pdf.add_page()
+            
+            # Set font
+            pdf.set_font('Arial', 'B', 16)
+            
+            # Title
+            pdf.cell(0, 10, f'IFRS Engine Report - {result.report_type.replace("_", " ").title()}', ln=True, align='C')
+            pdf.ln(5)
+            
+            # Report details
+            pdf.set_font('Arial', 'B', 12)
+            pdf.cell(0, 8, f'Run ID: {result.run_id}', ln=True)
+            pdf.cell(0, 8, f'Model Type: {result.model_type}', ln=True)
+            pdf.cell(0, 8, f'Year: {result.year} Quarter: {result.quarter}', ln=True)
+            pdf.cell(0, 8, f'Currency: {result.currency or "USD"}', ln=True)
+            pdf.cell(0, 8, f'Generated: {result.created_at}', ln=True)
+            pdf.ln(5)
+            
+            # Parse result data
+            if isinstance(result.result_json, dict) and 'results' in result.result_json:
+                results_data = result.result_json['results']
+                
+                # Summary view
+                if 'summaryView' in results_data and results_data['summaryView']:
+                    pdf.set_font('Arial', 'B', 14)
+                    pdf.cell(0, 10, 'Summary View', ln=True)
+                    pdf.ln(2)
+                    
+                    summary_data = results_data['summaryView']
+                    if summary_data:
+                        # Get headers from first row
+                        headers = list(summary_data[0].keys())
+                        
+                        # Set table headers
+                        pdf.set_font('Arial', 'B', 10)
+                        col_width = 190 / len(headers)
+                        for header in headers:
+                            pdf.cell(col_width, 8, str(header), border=1, align='C')
+                        pdf.ln()
+                        
+                        # Add data rows
+                        pdf.set_font('Arial', '', 9)
+                        for row in summary_data[:10]:  # Limit to first 10 rows for PDF
+                            for header in headers:
+                                value = row.get(header, '')
+                                if isinstance(value, (int, float)):
+                                    value = f"{value:,.2f}"
+                                pdf.cell(col_width, 6, str(value), border=1, align='C')
+                            pdf.ln()
+                        
+                        if len(summary_data) > 10:
+                            pdf.cell(0, 6, f'... and {len(summary_data) - 10} more rows', ln=True, align='C')
+                
+                # Detailed view
+                if 'detailedView' in results_data and results_data['detailedView']:
+                    pdf.add_page()
+                    pdf.set_font('Arial', 'B', 14)
+                    pdf.cell(0, 10, 'Detailed View', ln=True)
+                    pdf.ln(2)
+                    
+                    detailed_data = results_data['detailedView']
+                    if detailed_data:
+                        # Get headers from first row
+                        headers = list(detailed_data[0].keys())
+                        
+                        # Set table headers
+                        pdf.set_font('Arial', 'B', 8)
+                        col_width = 190 / len(headers)
+                        for header in headers:
+                            pdf.cell(col_width, 6, str(header), border=1, align='C')
+                        pdf.ln()
+                        
+                        # Add data rows
+                        pdf.set_font('Arial', '', 7)
+                        for row in detailed_data[:15]:  # Limit to first 15 rows for PDF
+                            for header in headers:
+                                value = row.get(header, '')
+                                if isinstance(value, (int, float)):
+                                    value = f"{value:,.2f}"
+                                pdf.cell(col_width, 5, str(value), border=1, align='C')
+                            pdf.ln()
+                        
+                        if len(detailed_data) > 15:
+                            pdf.cell(0, 5, f'... and {len(detailed_data) - 15} more rows', ln=True, align='C')
+            
+            # Generate PDF content
+            pdf_content = pdf.output(dest='S').encode('latin-1')
+            
+            # Create response
+            response = HttpResponse(pdf_content, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{result.report_type}_report_{result.run_id}.pdf"'
+            
+            return response
+            
+        except Exception as e:
+            return Response({
+                'error': f'Failed to generate PDF: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['get'])
     def download_excel(self, request, pk=None):
-        result = self.get_object()
-        return Response({
-            'message': 'Excel generation not implemented yet',
-            'result_id': result.id,
-            'report_type': result.report_type
-        })
+        """Download IFRS engine result as Excel"""
+        try:
+            result = self.get_object()
+            
+            if result.status != 'Success':
+                return Response({
+                    'error': 'Cannot generate Excel for failed report'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Import required libraries
+            import pandas as pd
+            from io import BytesIO
+            from datetime import datetime
+            
+            # Create Excel writer
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                
+                # Parse result data
+                if isinstance(result.result_json, dict) and 'results' in result.result_json:
+                    results_data = result.result_json['results']
+                    
+                    # Summary view
+                    if 'summaryView' in results_data and results_data['summaryView']:
+                        summary_df = pd.DataFrame(results_data['summaryView'])
+                        summary_df.to_excel(writer, sheet_name='Summary View', index=False)
+                    
+                    # Detailed view
+                    if 'detailedView' in results_data and results_data['detailedView']:
+                        detailed_df = pd.DataFrame(results_data['detailedView'])
+                        detailed_df.to_excel(writer, sheet_name='Detailed View', index=False)
+                    
+                    # Report metadata
+                    metadata = {
+                        'Field': ['Run ID', 'Model Type', 'Report Type', 'Year', 'Quarter', 'Currency', 'Status', 'Generated'],
+                        'Value': [
+                            result.run_id,
+                            result.model_type,
+                            result.report_type,
+                            result.year,
+                            result.quarter,
+                            result.currency or 'USD',
+                            result.status,
+                            result.created_at
+                        ]
+                    }
+                    metadata_df = pd.DataFrame(metadata)
+                    metadata_df.to_excel(writer, sheet_name='Report Info', index=False)
+            
+            # Get Excel content
+            output.seek(0)
+            excel_content = output.getvalue()
+            
+            # Create response
+            response = HttpResponse(excel_content, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            response['Content-Disposition'] = f'attachment; filename="{result.report_type}_report_{result.run_id}.xlsx"'
+            
+            return response
+            
+        except Exception as e:
+            return Response({
+                'error': f'Failed to generate Excel: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def destroy(self, request, *args, **kwargs):
         """Delete an IFRS engine result"""
