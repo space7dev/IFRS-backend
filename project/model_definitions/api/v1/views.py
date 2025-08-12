@@ -1100,12 +1100,36 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
     search_fields = ['run_id', 'model_guid', 'report_type']
     ordering_fields = ['created_at', 'model_type', 'report_type', 'year', 'quarter']
     ordering = ['-created_at']
-    pagination_class = PageNumberPagination
 
     def get_serializer_class(self):
         if self.action == 'create':
             return IFRSEngineResultCreateSerializer
         return IFRSEngineResultSerializer
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 12))
+        
+        total_count = queryset.count()
+        start = (page - 1) * page_size
+        end = start + page_size
+        
+        results = queryset[start:end]
+        
+        serializer = self.get_serializer(results, many=True)
+        
+        total_pages = (total_count + page_size - 1) // page_size
+        has_next = page < total_pages
+        has_previous = page > 1
+        
+        return Response({
+            'count': total_count,
+            'next': f"?page={page + 1}&page_size={page_size}" if has_next else None,
+            'previous': f"?page={page - 1}&page_size={page_size}" if has_previous else None,
+            'results': serializer.data
+        })
 
     def perform_create(self, serializer):
         username = self.request.user.username if self.request.user else 'system'
