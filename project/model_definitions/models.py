@@ -715,6 +715,7 @@ class ReportType(TimeStampedMixin):
     ]
     
     REPORT_TYPE_CHOICES = [
+        ('staging_table', 'Staging Table'),
         ('lrc_movement_report', 'LRC Movement Report'),
         ('lic_movement_report', 'LIC Movement Report'),
         ('insurance_revenue_expense_report', 'Insurance Revenue and Expense Report'),

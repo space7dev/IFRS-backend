@@ -1230,6 +1230,7 @@ class ReportGenerationSerializer(serializers.Serializer):
         child=serializers.IntegerField(),
         min_length=1
     )
+    conversion_engine_id = serializers.IntegerField()
     ifrs_engine_id = serializers.IntegerField()
     report_type_ids = serializers.ListField(
         child=serializers.IntegerField(),
