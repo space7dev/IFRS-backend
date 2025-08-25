@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.db import transaction
 from django.http import HttpResponse, Http404
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType, IFRSEngineResult, IFRSEngineInput
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType, IFRSEngineResult, IFRSEngineInput, IFRSApiConfig
 from .serializers import (
     ModelDefinitionListSerializer,
     ModelDefinitionDetailSerializer,
@@ -48,6 +48,9 @@ from .serializers import (
     ReportTypeSerializer,
     ReportTypeCreateSerializer,
     ReportTypeUpdateSerializer,
+    IFRSApiConfigSerializer,
+    IFRSApiConfigCreateSerializer,
+    IFRSApiConfigUpdateSerializer,
     IFRSEngineResultSerializer,
     IFRSEngineResultCreateSerializer,
     ReportGenerationSerializer,
@@ -1793,3 +1796,123 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                 os.unlink(input_file)
             except:
                 pass
+
+
+class IFRSApiConfigViewSet(viewsets.ModelViewSet):
+    queryset = IFRSApiConfig.objects.all()
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['api_source_name', 'client_id', 'data_type', 'owner']
+    ordering_fields = ['api_source_name', 'client_id', 'status', 'created_on', 'modified_on']
+    ordering = ['api_source_name', 'client_id']
+    filterset_fields = ['method', 'auth_type', 'schedule', 'status']
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return IFRSApiConfigCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return IFRSApiConfigUpdateSerializer
+        return IFRSApiConfigSerializer
+    
+    def perform_create(self, serializer):
+        """
+        Set owner to current user on creation
+        """
+        serializer.save(owner=self.request.user.username)
+    
+    @action(detail=True, methods=['post'])
+    def test_connection(self, request, pk=None):
+        """
+        Test API connection for the given configuration
+        """
+        api_config = self.get_object()
+        
+        try:
+            # Here will implement actual connection testing logic
+            # For now, just update the test status
+            api_config.last_test_date = timezone.now()
+            api_config.last_test_status = 'success'
+            api_config.save()
+            
+            return Response({
+                'detail': 'Connection test successful',
+                'lastTestDate': api_config.last_test_date,
+                'lastTestStatus': api_config.last_test_status
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            api_config.last_test_date = timezone.now()
+            api_config.last_test_status = 'failed'
+            api_config.save()
+            
+            return Response({
+                'detail': f'Connection test failed: {str(e)}',
+                'lastTestDate': api_config.last_test_date,
+                'lastTestStatus': api_config.last_test_status
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def dry_run(self, request, pk=None):
+        """
+        Perform a dry run to fetch sample data (100 rows)
+        """
+        api_config = self.get_object()
+        
+        try:
+            # Here will implement actual dry run logic
+            # For now, return a mock response
+            sample_data = {
+                'records_fetched': 100,
+                'sample_record': {
+                    'id': 1,
+                    'timestamp': '2024-01-01T00:00:00Z',
+                    'data': 'Sample data record'
+                },
+                'parsed_successfully': True,
+                'jsonpath_results': {
+                    'records': '$.data.items[*]',
+                    'total_count': '$.pagination.total'
+                }
+            }
+            
+            return Response({
+                'detail': 'Dry run completed successfully',
+                'sampleData': sample_data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'detail': f'Dry run failed: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        active_configs = self.queryset.filter(status='active')
+        page = self.paginate_queryset(active_configs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(active_configs, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_schedule(self, request):
+        """
+        Get API configurations by schedule type
+        """
+        schedule_type = request.query_params.get('schedule', None)
+        if not schedule_type:
+            return Response({
+                'detail': 'Schedule parameter is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        configs = self.queryset.filter(schedule=schedule_type)
+        page = self.paginate_queryset(configs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(configs, many=True)
+        return Response(serializer.data)

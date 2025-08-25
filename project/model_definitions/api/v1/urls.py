@@ -17,7 +17,8 @@ from .views import (
     LineOfBusinessViewSet,
     ReportTypeViewSet,
     IFRSEngineResultViewSet,
-    IFRSEngineInputViewSet
+    IFRSEngineInputViewSet,
+    IFRSApiConfigViewSet
 )
 
 router = routers.SimpleRouter()
@@ -36,6 +37,7 @@ router.register(r"currencies", CurrencyViewSet, basename="currency")
 router.register(r"line-of-business", LineOfBusinessViewSet, basename="line-of-business")
 router.register(r"report-types", ReportTypeViewSet, basename="report-type")
 router.register(r"ifrs-engine-results", IFRSEngineResultViewSet, basename="ifrs-engine-result")
+router.register(r"api-configs", IFRSApiConfigViewSet, basename="api-config")
 router.register(r"", ModelDefinitionViewSet, basename="model-definition")
 
 api_patterns = router.urls 

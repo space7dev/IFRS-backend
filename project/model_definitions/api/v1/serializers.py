@@ -22,7 +22,8 @@ from model_definitions.models import (
     LineOfBusiness,
     ReportType,
     IFRSEngineResult,
-    IFRSEngineInput
+    IFRSEngineInput,
+    IFRSApiConfig
 )
 
 User = get_user_model()
@@ -1215,6 +1216,190 @@ class IFRSEngineResultCreateSerializer(serializers.ModelSerializer):
             'result_json',
             'created_by'
         ]
+
+
+class IFRSApiConfigSerializer(serializers.ModelSerializer):
+    """
+    Serializer for IFRS API Configuration
+    """
+    maskedEndpoint = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = IFRSApiConfig
+        fields = [
+            'id', 'apiSourceName', 'clientId', 'apiEndpoint', 'maskedEndpoint',
+            'dataType', 'method', 'authType', 'schedule', 'status',
+            'headersQueryParams', 'paginationStrategy', 'pageParamName',
+            'limitParamName', 'nextTokenJsonpath', 'limitValue',
+            'watermarkFieldName', 'watermarkFormat', 'watermarkLocation',
+            'defaultInitialWatermark', 'recordsJsonpath', 'nextPageTokenJsonpath',
+            'totalCountJsonpath', 'primaryKeyFields', 'behavior',
+            'maxRps', 'retryCount', 'backoffMinMs', 'backoffMaxMs', 'timeoutMs',
+            'secretReferences', 'tlsRequired', 'mtlsCerts', 'ipAllowlistNote',
+            'rawLandingMode', 'mappingProfile', 'validationProfile',
+            'owner', 'alertEmails', 'alertWebhooks', 'autoDisableOnFailures',
+            'lastTestDate', 'lastTestStatus', 'lastRunDate', 'consecutiveFailures',
+            'createdOn', 'modifiedOn'
+        ]
+        extra_kwargs = {
+            'apiSourceName': {'source': 'api_source_name'},
+            'clientId': {'source': 'client_id'},
+            'apiEndpoint': {'source': 'api_endpoint'},
+            'dataType': {'source': 'data_type'},
+            'authType': {'source': 'auth_type'},
+            'headersQueryParams': {'source': 'headers_query_params'},
+            'paginationStrategy': {'source': 'pagination_strategy'},
+            'pageParamName': {'source': 'page_param_name'},
+            'limitParamName': {'source': 'limit_param_name'},
+            'nextTokenJsonpath': {'source': 'next_token_jsonpath'},
+            'limitValue': {'source': 'limit_value'},
+            'watermarkFieldName': {'source': 'watermark_field_name'},
+            'watermarkFormat': {'source': 'watermark_format'},
+            'watermarkLocation': {'source': 'watermark_location'},
+            'defaultInitialWatermark': {'source': 'default_initial_watermark'},
+            'recordsJsonpath': {'source': 'records_jsonpath'},
+            'nextPageTokenJsonpath': {'source': 'next_page_token_jsonpath'},
+            'totalCountJsonpath': {'source': 'total_count_jsonpath'},
+            'primaryKeyFields': {'source': 'primary_key_fields'},
+            'maxRps': {'source': 'max_rps'},
+            'retryCount': {'source': 'retry_count'},
+            'backoffMinMs': {'source': 'backoff_min_ms'},
+            'backoffMaxMs': {'source': 'backoff_max_ms'},
+            'timeoutMs': {'source': 'timeout_ms'},
+            'secretReferences': {'source': 'secret_references'},
+            'tlsRequired': {'source': 'tls_required'},
+            'mtlsCerts': {'source': 'mtls_certs'},
+            'ipAllowlistNote': {'source': 'ip_allowlist_note'},
+            'rawLandingMode': {'source': 'raw_landing_mode'},
+            'mappingProfile': {'source': 'mapping_profile'},
+            'validationProfile': {'source': 'validation_profile'},
+            'alertEmails': {'source': 'alert_emails'},
+            'alertWebhooks': {'source': 'alert_webhooks'},
+            'autoDisableOnFailures': {'source': 'auto_disable_on_failures'},
+            'lastTestDate': {'source': 'last_test_date'},
+            'lastTestStatus': {'source': 'last_test_status'},
+            'lastRunDate': {'source': 'last_run_date'},
+            'consecutiveFailures': {'source': 'consecutive_failures'},
+            'createdOn': {'source': 'created_on'},
+            'modifiedOn': {'source': 'modified_on'},
+        }
+        read_only_fields = ['id', 'maskedEndpoint', 'lastTestDate', 'lastTestStatus', 
+                          'lastRunDate', 'consecutiveFailures', 'createdOn', 'modifiedOn']
+        
+    def get_maskedEndpoint(self, obj):
+        """Return masked endpoint for security"""
+        return obj.mask_endpoint()
+
+
+class IFRSApiConfigCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IFRSApiConfig
+        fields = [
+            'apiSourceName', 'clientId', 'apiEndpoint', 'dataType', 'method',
+            'authType', 'schedule', 'status', 'headersQueryParams',
+            'paginationStrategy', 'pageParamName', 'limitParamName',
+            'nextTokenJsonpath', 'limitValue', 'watermarkFieldName',
+            'watermarkFormat', 'watermarkLocation', 'defaultInitialWatermark',
+            'recordsJsonpath', 'nextPageTokenJsonpath', 'totalCountJsonpath',
+            'primaryKeyFields', 'behavior', 'maxRps', 'retryCount',
+            'backoffMinMs', 'backoffMaxMs', 'timeoutMs', 'secretReferences',
+            'tlsRequired', 'mtlsCerts', 'ipAllowlistNote', 'rawLandingMode',
+            'mappingProfile', 'validationProfile', 'owner', 'alertEmails',
+            'alertWebhooks', 'autoDisableOnFailures'
+        ]
+        extra_kwargs = {
+            'apiSourceName': {'source': 'api_source_name'},
+            'clientId': {'source': 'client_id'},
+            'apiEndpoint': {'source': 'api_endpoint'},
+            'dataType': {'source': 'data_type'},
+            'authType': {'source': 'auth_type'},
+            'headersQueryParams': {'source': 'headers_query_params'},
+            'paginationStrategy': {'source': 'pagination_strategy'},
+            'pageParamName': {'source': 'page_param_name'},
+            'limitParamName': {'source': 'limit_param_name'},
+            'nextTokenJsonpath': {'source': 'next_token_jsonpath'},
+            'limitValue': {'source': 'limit_value'},
+            'watermarkFieldName': {'source': 'watermark_field_name'},
+            'watermarkFormat': {'source': 'watermark_format'},
+            'watermarkLocation': {'source': 'watermark_location'},
+            'defaultInitialWatermark': {'source': 'default_initial_watermark'},
+            'recordsJsonpath': {'source': 'records_jsonpath'},
+            'nextPageTokenJsonpath': {'source': 'next_page_token_jsonpath'},
+            'totalCountJsonpath': {'source': 'total_count_jsonpath'},
+            'primaryKeyFields': {'source': 'primary_key_fields'},
+            'maxRps': {'source': 'max_rps'},
+            'retryCount': {'source': 'retry_count'},
+            'backoffMinMs': {'source': 'backoff_min_ms'},
+            'backoffMaxMs': {'source': 'backoff_max_ms'},
+            'timeoutMs': {'source': 'timeout_ms'},
+            'secretReferences': {'source': 'secret_references'},
+            'tlsRequired': {'source': 'tls_required'},
+            'mtlsCerts': {'source': 'mtls_certs'},
+            'ipAllowlistNote': {'source': 'ip_allowlist_note'},
+            'rawLandingMode': {'source': 'raw_landing_mode'},
+            'mappingProfile': {'source': 'mapping_profile'},
+            'validationProfile': {'source': 'validation_profile'},
+            'alertEmails': {'source': 'alert_emails'},
+            'alertWebhooks': {'source': 'alert_webhooks'},
+            'autoDisableOnFailures': {'source': 'auto_disable_on_failures'},
+        }
+
+
+class IFRSApiConfigUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating IFRS API Configuration
+    """
+    class Meta:
+        model = IFRSApiConfig
+        fields = [
+            'apiSourceName', 'clientId', 'apiEndpoint', 'dataType', 'method',
+            'authType', 'schedule', 'status', 'headersQueryParams',
+            'paginationStrategy', 'pageParamName', 'limitParamName',
+            'nextTokenJsonpath', 'limitValue', 'watermarkFieldName',
+            'watermarkFormat', 'watermarkLocation', 'defaultInitialWatermark',
+            'recordsJsonpath', 'nextPageTokenJsonpath', 'totalCountJsonpath',
+            'primaryKeyFields', 'behavior', 'maxRps', 'retryCount',
+            'backoffMinMs', 'backoffMaxMs', 'timeoutMs', 'secretReferences',
+            'tlsRequired', 'mtlsCerts', 'ipAllowlistNote', 'rawLandingMode',
+            'mappingProfile', 'validationProfile', 'owner', 'alertEmails',
+            'alertWebhooks', 'autoDisableOnFailures'
+        ]
+        extra_kwargs = {
+            'apiSourceName': {'source': 'api_source_name'},
+            'clientId': {'source': 'client_id'},
+            'apiEndpoint': {'source': 'api_endpoint'},
+            'dataType': {'source': 'data_type'},
+            'authType': {'source': 'auth_type'},
+            'headersQueryParams': {'source': 'headers_query_params'},
+            'paginationStrategy': {'source': 'pagination_strategy'},
+            'pageParamName': {'source': 'page_param_name'},
+            'limitParamName': {'source': 'limit_param_name'},
+            'nextTokenJsonpath': {'source': 'next_token_jsonpath'},
+            'limitValue': {'source': 'limit_value'},
+            'watermarkFieldName': {'source': 'watermark_field_name'},
+            'watermarkFormat': {'source': 'watermark_format'},
+            'watermarkLocation': {'source': 'watermark_location'},
+            'defaultInitialWatermark': {'source': 'default_initial_watermark'},
+            'recordsJsonpath': {'source': 'records_jsonpath'},
+            'nextPageTokenJsonpath': {'source': 'next_page_token_jsonpath'},
+            'totalCountJsonpath': {'source': 'total_count_jsonpath'},
+            'primaryKeyFields': {'source': 'primary_key_fields'},
+            'maxRps': {'source': 'max_rps'},
+            'retryCount': {'source': 'retry_count'},
+            'backoffMinMs': {'source': 'backoff_min_ms'},
+            'backoffMaxMs': {'source': 'backoff_max_ms'},
+            'timeoutMs': {'source': 'timeout_ms'},
+            'secretReferences': {'source': 'secret_references'},
+            'tlsRequired': {'source': 'tls_required'},
+            'mtlsCerts': {'source': 'mtls_certs'},
+            'ipAllowlistNote': {'source': 'ip_allowlist_note'},
+            'rawLandingMode': {'source': 'raw_landing_mode'},
+            'mappingProfile': {'source': 'mapping_profile'},
+            'validationProfile': {'source': 'validation_profile'},
+            'alertEmails': {'source': 'alert_emails'},
+            'alertWebhooks': {'source': 'alert_webhooks'},
+            'autoDisableOnFailures': {'source': 'auto_disable_on_failures'},
+        }
 
 
 class ReportGenerationSerializer(serializers.Serializer):

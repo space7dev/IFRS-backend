@@ -827,6 +827,313 @@ class IFRSEngineInput(models.Model):
         return f"Run {self.run_id} - {self.created_at}"
 
 
+class IFRSApiConfig(TimeStampedMixin):
+    METHOD_CHOICES = [
+        ('GET', 'GET'),
+        ('POST', 'POST'),
+    ]
+    
+    AUTH_TYPE_CHOICES = [
+        ('api_key', 'API Key'),
+        ('oauth', 'OAuth'),
+        ('basic', 'Basic Auth'),
+        ('bearer', 'Bearer Token'),
+        ('none', 'None'),
+    ]
+    
+    SCHEDULE_CHOICES = [
+        ('manual', 'Manual'),
+        ('daily', 'Daily'),
+        ('weekly', 'Weekly'),
+        ('monthly', 'Monthly'),
+        ('quarterly', 'Quarterly'),
+        ('semi_annually', 'Semi-Annually'),
+        ('yearly', 'Yearly'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('disabled', 'Disabled'),
+        ('error', 'Error'),
+    ]
+    
+    PAGINATION_STRATEGY_CHOICES = [
+        ('none', 'None'),
+        ('page_limit', 'Page/Limit'),
+        ('cursor_next_token', 'Cursor/Next Token'),
+        ('link_based', 'Link-based'),
+    ]
+    
+    WATERMARK_FORMAT_CHOICES = [
+        ('iso8601', 'ISO8601'),
+        ('date', 'Date'),
+        ('epoch', 'Epoch'),
+    ]
+    
+    WATERMARK_LOCATION_CHOICES = [
+        ('query_param', 'Query Parameter'),
+        ('header', 'Header'),
+        ('body', 'Body'),
+    ]
+    
+    BEHAVIOR_CHOICES = [
+        ('append_only', 'Append Only'),
+        ('upsert_on_key', 'Upsert on Key'),
+    ]
+    
+    api_source_name = models.CharField(
+        max_length=255,
+        help_text="API source name"
+    )
+    client_id = models.CharField(
+        max_length=255,
+        help_text="Client ID / System name"
+    )
+    api_endpoint = models.CharField(
+        max_length=500,
+        help_text="API endpoint (masked for security)"
+    )
+    data_type = models.CharField(
+        max_length=100,
+        help_text="Data type"
+    )
+    method = models.CharField(
+        max_length=10,
+        choices=METHOD_CHOICES,
+        default='GET',
+        help_text="HTTP method"
+    )
+    auth_type = models.CharField(
+        max_length=20,
+        choices=AUTH_TYPE_CHOICES,
+        default='api_key',
+        help_text="Authentication type"
+    )
+    schedule = models.CharField(
+        max_length=20,
+        choices=SCHEDULE_CHOICES,
+        default='manual',
+        help_text="Execution schedule"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='active',
+        help_text="Configuration status"
+    )
+    
+    headers_query_params = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Headers and query parameters as key-value pairs"
+    )
+    
+    pagination_strategy = models.CharField(
+        max_length=20,
+        choices=PAGINATION_STRATEGY_CHOICES,
+        default='none',
+        help_text="Pagination strategy"
+    )
+    page_param_name = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Page parameter name for pagination"
+    )
+    limit_param_name = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Limit parameter name for pagination"
+    )
+    next_token_jsonpath = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="JSONPath for next page token"
+    )
+    limit_value = models.IntegerField(
+        blank=True,
+        null=True,
+        help_text="Default limit value for pagination"
+    )
+    
+    watermark_field_name = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Watermark field name (e.g., updated_at)"
+    )
+    watermark_format = models.CharField(
+        max_length=20,
+        choices=WATERMARK_FORMAT_CHOICES,
+        default='iso8601',
+        blank=True,
+        null=True,
+        help_text="Watermark format"
+    )
+    watermark_location = models.CharField(
+        max_length=20,
+        choices=WATERMARK_LOCATION_CHOICES,
+        default='query_param',
+        blank=True,
+        null=True,
+        help_text="Watermark location"
+    )
+    default_initial_watermark = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Default initial watermark value"
+    )
+    
+    records_jsonpath = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="JSONPath for records (e.g., $.data.items[*])"
+    )
+    next_page_token_jsonpath = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="JSONPath for next page token"
+    )
+    total_count_jsonpath = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="JSONPath for total count"
+    )
+    
+    primary_key_fields = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Primary key fields for deduplication"
+    )
+    behavior = models.CharField(
+        max_length=20,
+        choices=BEHAVIOR_CHOICES,
+        default='append_only',
+        help_text="Drop/Upsert behavior"
+    )
+    
+    max_rps = models.IntegerField(
+        default=10,
+        help_text="Maximum requests per second"
+    )
+    retry_count = models.IntegerField(
+        default=3,
+        help_text="Number of retries on failure"
+    )
+    backoff_min_ms = models.IntegerField(
+        default=200,
+        help_text="Minimum backoff time in milliseconds"
+    )
+    backoff_max_ms = models.IntegerField(
+        default=2000,
+        help_text="Maximum backoff time in milliseconds"
+    )
+    timeout_ms = models.IntegerField(
+        default=30000,
+        help_text="Request timeout in milliseconds"
+    )
+    
+    secret_references = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Secret references stored in vault"
+    )
+    tls_required = models.BooleanField(
+        default=True,
+        help_text="Whether TLS is required"
+    )
+    mtls_certs = models.FileField(
+        upload_to='api_certs/',
+        blank=True,
+        null=True,
+        help_text="mTLS certificates file"
+    )
+    ip_allowlist_note = models.TextField(
+        blank=True,
+        help_text="IP allowlist notes"
+    )
+    
+    raw_landing_mode = models.BooleanField(
+        default=True,
+        help_text="Whether to use raw landing mode (JSON per row)"
+    )
+    mapping_profile = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="Mapping profile reference"
+    )
+    validation_profile = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="Validation profile reference"
+    )
+    
+    owner = models.CharField(
+        max_length=100,
+        help_text="Configuration owner"
+    )
+    alert_emails = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Alert email addresses on failure"
+    )
+    alert_webhooks = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Alert webhook URLs on failure"
+    )
+    auto_disable_on_failures = models.IntegerField(
+        default=5,
+        help_text="Auto-disable after N consecutive failures"
+    )
+    
+    last_test_date = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Last connection test date"
+    )
+    last_test_status = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text="Last test status"
+    )
+    last_run_date = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Last execution date"
+    )
+    consecutive_failures = models.IntegerField(
+        default=0,
+        help_text="Count of consecutive failures"
+    )
+    
+    class Meta:
+        ordering = ['api_source_name', 'client_id']
+        verbose_name = 'IFRS API Configuration'
+        verbose_name_plural = 'IFRS API Configurations'
+        db_table = 'ifrs_apis'
+        
+    def __str__(self):
+        return f"{self.api_source_name} - {self.client_id}"
+    
+    def mask_endpoint(self):
+        if not self.api_endpoint:
+            return ""
+        parts = self.api_endpoint.split('/')
+        if len(parts) > 3:
+            return f"{parts[0]}//{parts[2]}/***"
+        return self.api_endpoint
+
+
 class IFRSEngineResult(models.Model):
     STATUS_CHOICES = [
         ('Success', 'Success'),
