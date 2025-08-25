@@ -1140,7 +1140,6 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def download_pdf(self, request, pk=None):
-        """Download IFRS engine result as PDF"""
         try:
             result = self.get_object()
             
@@ -1149,115 +1148,195 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                     'error': 'Cannot generate PDF for failed report'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Import required libraries
-            from fpdf import FPDF
+            from reportlab.lib.pagesizes import letter, A4, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib import colors
+            from reportlab.lib.units import inch
+            from io import BytesIO
             import json
             from datetime import datetime
             
-            # Create PDF
-            pdf = FPDF()
-            pdf.add_page()
+            buffer = BytesIO()
             
-            # Set font
-            pdf.set_font('Arial', 'B', 16)
+            doc = SimpleDocTemplate(
+                buffer, 
+                pagesize=landscape(A4),
+                rightMargin=30,
+                leftMargin=30,
+                topMargin=30,
+                bottomMargin=30
+            )
             
-            # Title
-            pdf.cell(0, 10, f'IFRS Engine Report - {result.report_type.replace("_", " ").title()}', ln=True, align='C')
-            pdf.ln(5)
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                alignment=1,
+                spaceAfter=20,
+                fontSize=16,
+                textColor=colors.darkblue
+            )
             
-            # Report details
-            pdf.set_font('Arial', 'B', 12)
-            pdf.cell(0, 8, f'Run ID: {result.run_id}', ln=True)
-            pdf.cell(0, 8, f'Model Type: {result.model_type}', ln=True)
-            pdf.cell(0, 8, f'Year: {result.year} Quarter: {result.quarter}', ln=True)
-            pdf.cell(0, 8, f'Currency: {result.currency or "USD"}', ln=True)
-            pdf.cell(0, 8, f'Generated: {result.created_at}', ln=True)
-            pdf.ln(5)
+            heading_style = ParagraphStyle(
+                'CustomHeading',
+                parent=styles['Heading2'],
+                spaceAfter=10,
+                spaceBefore=15,
+                fontSize=14,
+                textColor=colors.darkblue
+            )
             
-            # Parse result data
+            normal_style = styles['Normal']
+            
+            content = []
+            
+            title = f'IFRS Engine Report - {result.report_type.replace("_", " ").title()}'
+            content.append(Paragraph(title, title_style))
+            content.append(Spacer(1, 12))
+            
+            metadata_data = [
+                ['Run ID:', result.run_id],
+                ['Model Type:', result.model_type],
+                ['Report Type:', result.report_type.replace('_', ' ').title()],
+                ['Year:', str(result.year)],
+                ['Quarter:', result.quarter],
+                ['Currency:', result.currency or 'USD'],
+                ['Status:', result.status],
+                ['Generated:', result.created_at.strftime('%Y-%m-%d %H:%M:%S') if result.created_at else 'N/A']
+            ]
+            
+            metadata_table = Table(metadata_data, colWidths=[2*inch, 4*inch])
+            metadata_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            
+            content.append(metadata_table)
+            content.append(Spacer(1, 20))
+            
             if isinstance(result.result_json, dict) and 'results' in result.result_json:
                 results_data = result.result_json['results']
                 
-                # Summary view
-                if 'summaryView' in results_data and results_data['summaryView']:
-                    pdf.set_font('Arial', 'B', 14)
-                    pdf.cell(0, 10, 'Summary View', ln=True)
-                    pdf.ln(2)
+                summary_data = results_data.get('summaryView') or results_data.get('summary_view')
+                if summary_data and len(summary_data) > 0:
+                    content.append(Paragraph('Summary View', heading_style))
                     
-                    summary_data = results_data['summaryView']
-                    if summary_data:
-                        # Get headers from first row
-                        headers = list(summary_data[0].keys())
-                        
-                        # Set table headers
-                        pdf.set_font('Arial', 'B', 10)
-                        col_width = 190 / len(headers)
+                    headers = list(summary_data[0].keys())
+                    table_data = [headers]
+                    
+                    for row in summary_data:
+                        table_row = []
                         for header in headers:
-                            pdf.cell(col_width, 8, str(header), border=1, align='C')
-                        pdf.ln()
-                        
-                        # Add data rows
-                        pdf.set_font('Arial', '', 9)
-                        for row in summary_data[:10]:  # Limit to first 10 rows for PDF
-                            for header in headers:
-                                value = row.get(header, '')
-                                if isinstance(value, (int, float)):
-                                    value = f"{value:,.2f}"
-                                pdf.cell(col_width, 6, str(value), border=1, align='C')
-                            pdf.ln()
-                        
-                        if len(summary_data) > 10:
-                            pdf.cell(0, 6, f'... and {len(summary_data) - 10} more rows', ln=True, align='C')
+                            value = row.get(header, '')
+                            if isinstance(value, (int, float)):
+                                if abs(value) >= 1000:
+                                    formatted_value = f"{value:,.0f}"
+                                else:
+                                    formatted_value = f"{value:,.2f}"
+                            else:
+                                formatted_value = str(value)
+                            table_row.append(formatted_value)
+                        table_data.append(table_row)
+                    
+                    available_width = 10 * inch
+                    num_columns = len(headers)
+                    col_width = available_width / num_columns
+                    col_widths = [col_width] * num_columns
+                    
+                    summary_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+                    summary_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.lightblue),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                        ('FONTSIZE', (0, 0), (-1, 0), 9),
+                        ('FONTSIZE', (0, 1), (-1, -1), 8),
+                        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+                    ]))
+                    
+                    content.append(summary_table)
+                    content.append(PageBreak())
                 
-                # Detailed view
-                if 'detailedView' in results_data and results_data['detailedView']:
-                    pdf.add_page()
-                    pdf.set_font('Arial', 'B', 14)
-                    pdf.cell(0, 10, 'Detailed View', ln=True)
-                    pdf.ln(2)
+                detailed_data = results_data.get('detailedView') or results_data.get('detailed_view')
+                if detailed_data and len(detailed_data) > 0:
+                    content.append(Paragraph('Detailed View', heading_style))
                     
-                    detailed_data = results_data['detailedView']
-                    if detailed_data:
-                        # Get headers from first row
-                        headers = list(detailed_data[0].keys())
-                        
-                        # Set table headers
-                        pdf.set_font('Arial', 'B', 8)
-                        col_width = 190 / len(headers)
+                    headers = list(detailed_data[0].keys())
+                    table_data = [headers]
+                    
+                    display_rows = detailed_data[:50]
+                    
+                    for row in display_rows:
+                        table_row = []
                         for header in headers:
-                            pdf.cell(col_width, 6, str(header), border=1, align='C')
-                        pdf.ln()
-                        
-                        # Add data rows
-                        pdf.set_font('Arial', '', 7)
-                        for row in detailed_data[:15]:  # Limit to first 15 rows for PDF
-                            for header in headers:
-                                value = row.get(header, '')
-                                if isinstance(value, (int, float)):
-                                    value = f"{value:,.2f}"
-                                pdf.cell(col_width, 5, str(value), border=1, align='C')
-                            pdf.ln()
-                        
-                        if len(detailed_data) > 15:
-                            pdf.cell(0, 5, f'... and {len(detailed_data) - 15} more rows', ln=True, align='C')
+                            value = row.get(header, '')
+                            if isinstance(value, (int, float)):
+                                if abs(value) >= 1000:
+                                    formatted_value = f"{value:,.0f}"
+                                else:
+                                    formatted_value = f"{value:,.2f}"
+                            else:
+                                formatted_value = str(value)[:15]  # Truncate long strings
+                            table_row.append(formatted_value)
+                        table_data.append(table_row)
+                    
+                    available_width = 10 * inch
+                    num_columns = len(headers)
+                    col_width = available_width / num_columns
+                    col_widths = [col_width] * num_columns
+                    
+                    detailed_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+                    detailed_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                        ('FONTSIZE', (0, 0), (-1, 0), 8),
+                        ('FONTSIZE', (0, 1), (-1, -1), 7),
+                        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+                    ]))
+                    
+                    content.append(detailed_table)
+                    
+                    if len(detailed_data) > 50:
+                        content.append(Spacer(1, 12))
+                        content.append(Paragraph(f'Note: Showing first 50 of {len(detailed_data)} total records. Download Excel for complete data.', normal_style))
             
-            # Generate PDF content
-            pdf_content = pdf.output(dest='S').encode('latin-1')
+            doc.build(content)
             
-            # Create response
+            pdf_content = buffer.getvalue()
+            buffer.close()
+            
             response = HttpResponse(pdf_content, content_type='application/pdf')
             response['Content-Disposition'] = f'attachment; filename="{result.report_type}_report_{result.run_id}.pdf"'
             
             return response
             
         except Exception as e:
+            import traceback
             return Response({
-                'error': f'Failed to generate PDF: {str(e)}'
+                'error': f'Failed to generate PDF: {str(e)}',
+                'traceback': traceback.format_exc()
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['get'])
     def download_excel(self, request, pk=None):
-        """Download IFRS engine result as Excel"""
+        """Download IFRS engine result as Excel with enhanced formatting"""
         try:
             result = self.get_object()
             
@@ -1266,47 +1345,237 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                     'error': 'Cannot generate Excel for failed report'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Import required libraries
-            import pandas as pd
+            from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+            from openpyxl.workbook import Workbook
+            from openpyxl.worksheet.table import Table, TableStyleInfo
             from io import BytesIO
             from datetime import datetime
             
-            # Create Excel writer
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                
-                # Parse result data
-                if isinstance(result.result_json, dict) and 'results' in result.result_json:
-                    results_data = result.result_json['results']
-                    
-                    # Summary view
-                    if 'summaryView' in results_data and results_data['summaryView']:
-                        summary_df = pd.DataFrame(results_data['summaryView'])
-                        summary_df.to_excel(writer, sheet_name='Summary View', index=False)
-                    
-                    # Detailed view
-                    if 'detailedView' in results_data and results_data['detailedView']:
-                        detailed_df = pd.DataFrame(results_data['detailedView'])
-                        detailed_df.to_excel(writer, sheet_name='Detailed View', index=False)
-                    
-                    # Report metadata
-                    metadata = {
-                        'Field': ['Run ID', 'Model Type', 'Report Type', 'Year', 'Quarter', 'Currency', 'Status', 'Generated'],
-                        'Value': [
-                            result.run_id,
-                            result.model_type,
-                            result.report_type,
-                            result.year,
-                            result.quarter,
-                            result.currency or 'USD',
-                            result.status,
-                            result.created_at
-                        ]
-                    }
-                    metadata_df = pd.DataFrame(metadata)
-                    metadata_df.to_excel(writer, sheet_name='Report Info', index=False)
+            wb = Workbook()
             
-            # Get Excel content
+            if 'Sheet' in wb.sheetnames:
+                wb.remove(wb['Sheet'])
+            
+            header_font = Font(bold=True, color='FFFFFF')
+            header_fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+            cell_border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            center_alignment = Alignment(horizontal='center', vertical='center')
+            currency_format = '#,##0.00'
+            number_format = '#,##0'
+            
+            if isinstance(result.result_json, dict) and 'results' in result.result_json:
+                results_data = result.result_json['results']
+                
+                metadata_ws = wb.create_sheet('Report Info')
+                
+                summary_data = results_data.get('summaryView', results_data.get('summary_view', []))
+                detailed_data = results_data.get('detailedView', results_data.get('detailed_view', []))
+                
+                report_descriptions = {
+                    'lrc_movement_report': 'Liability for Remaining Coverage movements',
+                    'lic_movement_report': 'Liability for Incurred Claims movements', 
+                    'staging_table': 'Conversion engine output data',
+                    'insurance_revenue_expense_report': 'Insurance revenue and expense analysis',
+                    'disclosure_report': 'Financial disclosure information',
+                    'financial_statement_items_report': 'Financial statement line items',
+                    'premium_allocation_reconciliation': 'Premium allocation and reconciliation',
+                    'loss_component_report': 'Loss component analysis',
+                    'discount_rate_reconciliation': 'Discount rate reconciliation',
+                    'experience_adjustment_report': 'Experience adjustment calculations',
+                    'reinsurance_report': 'Reinsurance transactions and balances',
+                    'paa_roll_forward_report': 'Premium Allocation Approach roll forward',
+                    'cash_flow_statement_report': 'Cash flow statement preparation'
+                }
+                
+                lobs = []
+                if summary_data:
+                    first_row = summary_data[0] if summary_data else {}
+                    lobs = [key for key in first_row.keys() if key not in ['reportingDate', 'year', 'reporting_date']]
+                elif detailed_data:
+                    lobs = list(set(row.get('lob', '') for row in detailed_data if row.get('lob')))
+                
+                lob_text = f" across {len(lobs)} Lines of Business: {', '.join(lobs[:5])}" if lobs else ""
+                if len(lobs) > 5:
+                    lob_text += f" and {len(lobs) - 5} others"
+                
+                report_desc = report_descriptions.get(result.report_type, 'Report data')
+                summary_desc = f"{len(summary_data)} records - {report_desc} aggregated by Line of Business" if summary_data else "No summary data available"
+                detailed_desc = f"{len(detailed_data)} records - {report_desc} with transaction-level detail{lob_text}" if detailed_data else "No detailed data available"
+                
+                metadata_data = [
+                    ['Field', 'Value'],
+                    ['Run ID', result.run_id],
+                    ['Model Type', result.model_type],
+                    ['Report Type', result.report_type.replace('_', ' ').title()],
+                    ['Report Description', report_descriptions.get(result.report_type, 'IFRS calculation report')],
+                    ['Year', result.year],
+                    ['Quarter', result.quarter],
+                    ['Currency', result.currency or 'USD'],
+                    ['Status', result.status],
+                    ['Generated', result.created_at.strftime('%Y-%m-%d %H:%M:%S') if result.created_at else 'N/A'],
+                    ['Lines of Business', f"{len(lobs)} LOBs: {', '.join(lobs)}" if lobs else "Not available"],
+                    ['Summary Records', summary_desc],
+                    ['Detailed Records', detailed_desc]
+                ]
+                
+                for row_idx, row_data in enumerate(metadata_data, 1):
+                    for col_idx, value in enumerate(row_data, 1):
+                        cell = metadata_ws.cell(row=row_idx, column=col_idx, value=value)
+                        cell.border = cell_border
+                        if row_idx == 1:  # Header row
+                            cell.font = header_font
+                            cell.fill = header_fill
+                            cell.alignment = center_alignment
+                        elif col_idx == 1:  # Field column
+                            cell.font = Font(bold=True)
+                
+                for column in metadata_ws.columns:
+                    max_length = 0
+                    column_letter = column[0].column_letter
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    adjusted_width = min(max_length + 2, 50)
+                    metadata_ws.column_dimensions[column_letter].width = adjusted_width
+                
+                summary_data = results_data.get('summaryView') or results_data.get('summary_view')
+                if summary_data and len(summary_data) > 0:
+                    summary_ws = wb.create_sheet('Summary View')
+                    
+                    headers = list(summary_data[0].keys())
+                    table_data = [headers]
+                    
+                    for row in summary_data:
+                        table_row = []
+                        for header in headers:
+                            value = row.get(header, '')
+                            if isinstance(value, (int, float)):
+                                if abs(value) >= 1000:
+                                    formatted_value = f"{value:,.0f}"
+                                else:
+                                    formatted_value = f"{value:,.2f}"
+                            else:
+                                formatted_value = str(value)
+                            table_row.append(formatted_value)
+                        table_data.append(table_row)
+                    
+                    for row_idx, row_data in enumerate(table_data, 1):
+                        for col_idx, value in enumerate(row_data, 1):
+                            cell = summary_ws.cell(row=row_idx, column=col_idx, value=value)
+                            cell.border = cell_border
+                            cell.alignment = center_alignment
+                            
+                            if row_idx == 1:
+                                cell.font = header_font
+                                cell.fill = header_fill
+                            elif isinstance(value, str) and value.replace(',', '').replace('.', '').replace('-', '').isdigit():
+                                try:
+                                    numeric_value = float(value.replace(',', ''))
+                                    if abs(numeric_value) >= 1000:
+                                        cell.number_format = currency_format
+                                    else:
+                                        cell.number_format = number_format
+                                except:
+                                    pass
+                    
+                    table_ref = f"A1:{chr(65 + len(headers) - 1)}{len(table_data)}"
+                    table = Table(displayName="SummaryTable", ref=table_ref)
+                    style = TableStyleInfo(
+                        name="TableStyleMedium9", 
+                        showFirstColumn=False,
+                        showLastColumn=False, 
+                        showRowStripes=True, 
+                        showColumnStripes=False
+                    )
+                    table.tableStyleInfo = style
+                    summary_ws.add_table(table)
+                    
+                    for column in summary_ws.columns:
+                        max_length = 0
+                        column_letter = column[0].column_letter
+                        for cell in column:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(str(cell.value))
+                            except:
+                                pass
+                        adjusted_width = min(max_length + 2, 50)
+                        summary_ws.column_dimensions[column_letter].width = adjusted_width
+                
+                detailed_data = results_data.get('detailedView') or results_data.get('detailed_view')
+                if detailed_data and len(detailed_data) > 0:
+                    detailed_ws = wb.create_sheet('Detailed View')
+                    
+                    headers = list(detailed_data[0].keys())
+                    table_data = [headers]
+                    
+                    for row in detailed_data:
+                        table_row = []
+                        for header in headers:
+                            value = row.get(header, '')
+                            if isinstance(value, (int, float)):
+                                if abs(value) >= 1000:
+                                    formatted_value = f"{value:,.0f}"
+                                else:
+                                    formatted_value = f"{value:,.2f}"
+                            else:
+                                formatted_value = str(value)[:15]
+                            table_row.append(formatted_value)
+                        table_data.append(table_row)
+                    
+                    for row_idx, row_data in enumerate(table_data, 1):
+                        for col_idx, value in enumerate(row_data, 1):
+                            cell = detailed_ws.cell(row=row_idx, column=col_idx, value=value)
+                            cell.border = cell_border
+                            cell.alignment = center_alignment
+                            
+                            if row_idx == 1:
+                                cell.font = Font(bold=True, color='FFFFFF')
+                                cell.fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+                            elif isinstance(value, str) and value.replace(',', '').replace('.', '').replace('-', '').isdigit():
+                                try:
+                                    numeric_value = float(value.replace(',', ''))
+                                    if abs(numeric_value) >= 1000:
+                                        cell.number_format = currency_format
+                                    else:
+                                        cell.number_format = number_format
+                                except:
+                                    pass
+                    
+                    table_ref = f"A1:{chr(65 + len(headers) - 1)}{len(table_data)}"
+                    table = Table(displayName="DetailedTable", ref=table_ref)
+                    style = TableStyleInfo(
+                        name="TableStyleMedium2", 
+                        showFirstColumn=False,
+                        showLastColumn=False, 
+                        showRowStripes=True, 
+                        showColumnStripes=False
+                    )
+                    table.tableStyleInfo = style
+                    detailed_ws.add_table(table)
+                    
+                    for column in detailed_ws.columns:
+                        max_length = 0
+                        column_letter = column[0].column_letter
+                        for cell in column:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(str(cell.value))
+                            except:
+                                pass
+                        adjusted_width = min(max_length + 2, 50)
+                        detailed_ws.column_dimensions[column_letter].width = adjusted_width
+            
+            output = BytesIO()
+            wb.save(output)
             output.seek(0)
             excel_content = output.getvalue()
             
@@ -1317,8 +1586,10 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
             return response
             
         except Exception as e:
+            import traceback
             return Response({
-                'error': f'Failed to generate Excel: {str(e)}'
+                'error': f'Failed to generate Excel: {str(e)}',
+                'traceback': traceback.format_exc()
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def destroy(self, request, *args, **kwargs):
