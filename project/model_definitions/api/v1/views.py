@@ -2097,11 +2097,41 @@ class IFRSApiConfigViewSet(viewsets.ModelViewSet):
         """
         Test API connection for the given configuration
         """
+        import requests
+        from django.utils import timezone
+        
         api_config = self.get_object()
         
+        if not api_config.api_endpoint or not api_config.api_endpoint.startswith(('http://', 'https://')):
+            api_config.last_test_date = timezone.now()
+            api_config.last_test_status = 'failed'
+            api_config.save()
+            
+            return Response({
+                'detail': f'Invalid API endpoint: {api_config.api_endpoint}. Must start with http:// or https://',
+                'lastTestDate': api_config.last_test_date,
+                'lastTestStatus': api_config.last_test_status
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
-            # Here will implement actual connection testing logic
-            # For now, just update the test status
+            headers = self._prepare_headers(api_config)
+            auth = self._prepare_auth(api_config)
+            
+            test_params = self._prepare_test_params(api_config)
+            
+            response = requests.request(
+                method=api_config.method,
+                url=api_config.api_endpoint,
+                headers=headers,
+                auth=auth,
+                params=test_params if api_config.method == 'GET' else None,
+                json=test_params if api_config.method == 'POST' else None,
+                timeout=api_config.timeout_ms / 1000 if api_config.timeout_ms else 30,
+                verify=api_config.tls_required
+            )
+            
+            response.raise_for_status()
+            
             api_config.last_test_date = timezone.now()
             api_config.last_test_status = 'success'
             api_config.save()
@@ -2109,8 +2139,43 @@ class IFRSApiConfigViewSet(viewsets.ModelViewSet):
             return Response({
                 'detail': 'Connection test successful',
                 'lastTestDate': api_config.last_test_date,
-                'lastTestStatus': api_config.last_test_status
+                'lastTestStatus': api_config.last_test_status,
+                'responseStatus': response.status_code,
+                'responseSize': len(response.content)
             }, status=status.HTTP_200_OK)
+            
+        except requests.exceptions.Timeout:
+            api_config.last_test_date = timezone.now()
+            api_config.last_test_status = 'failed'
+            api_config.save()
+            
+            return Response({
+                'detail': 'Connection test failed: Request timeout',
+                'lastTestDate': api_config.last_test_date,
+                'lastTestStatus': api_config.last_test_status
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except requests.exceptions.ConnectionError:
+            api_config.last_test_date = timezone.now()
+            api_config.last_test_status = 'failed'
+            api_config.save()
+            
+            return Response({
+                'detail': 'Connection test failed: Unable to connect to API endpoint',
+                'lastTestDate': api_config.last_test_date,
+                'lastTestStatus': api_config.last_test_status
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except requests.exceptions.HTTPError as e:
+            api_config.last_test_date = timezone.now()
+            api_config.last_test_status = 'failed'
+            api_config.save()
+            
+            return Response({
+                'detail': f'Connection test failed: HTTP {e.response.status_code} - {str(e)}',
+                'lastTestDate': api_config.last_test_date,
+                'lastTestStatus': api_config.last_test_status
+            }, status=status.HTTP_400_BAD_REQUEST)
             
         except Exception as e:
             api_config.last_test_date = timezone.now()
@@ -2128,29 +2193,146 @@ class IFRSApiConfigViewSet(viewsets.ModelViewSet):
         """
         Perform a dry run to fetch sample data (100 rows)
         """
+        import requests
+        import json
+        from jsonpath_ng import parse
+        
         api_config = self.get_object()
         
+        # Validate API endpoint URL
+        if not api_config.api_endpoint or not api_config.api_endpoint.startswith(('http://', 'https://')):
+            return Response({
+                'detail': f'Invalid API endpoint: {api_config.api_endpoint}. Must start with http:// or https://'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
-            # Here will implement actual dry run logic
-            # For now, return a mock response
+            # Prepare headers and authentication
+            headers = self._prepare_headers(api_config)
+            auth = self._prepare_auth(api_config)
+            
+            # Prepare dry run parameters (limit to 100 records)
+            dry_run_params = self._prepare_dry_run_params(api_config)
+            
+            # Make the dry run request
+            response = requests.request(
+                method=api_config.method,
+                url=api_config.api_endpoint,
+                headers=headers,
+                auth=auth,
+                params=dry_run_params if api_config.method == 'GET' else None,
+                json=dry_run_params if api_config.method == 'POST' else None,
+                timeout=api_config.timeout_ms / 1000 if api_config.timeout_ms else 30,
+                verify=api_config.tls_required
+            )
+            
+            # Check if request was successful
+            response.raise_for_status()
+            
+            # Parse response
+            response_data = response.json()
+            
+            # Extract records using JSONPath if configured
+            records = []
+            total_count = 0
+            
+            if api_config.records_jsonpath:
+                try:
+                    jsonpath_expr = parse(api_config.records_jsonpath)
+                    records = [match.value for match in jsonpath_expr.find(response_data)]
+                except Exception as e:
+                    records = [response_data]  # Fallback to raw response
+            else:
+                # Try common patterns
+                if isinstance(response_data, list):
+                    records = response_data
+                elif isinstance(response_data, dict):
+                    # Try common field names
+                    for field in ['data', 'items', 'records', 'results']:
+                        if field in response_data and isinstance(response_data[field], list):
+                            records = response_data[field]
+                            break
+                    if not records:
+                        records = [response_data]
+                else:
+                    records = [response_data]
+            
+            # Get total count if available
+            if api_config.total_count_jsonpath:
+                try:
+                    jsonpath_expr = parse(api_config.total_count_jsonpath)
+                    count_matches = [match.value for match in jsonpath_expr.find(response_data)]
+                    if count_matches:
+                        total_count = count_matches[0]
+                except Exception:
+                    total_count = len(records)
+            else:
+                total_count = len(records)
+            
+            # Prepare sample data
+            sample_record = records[0] if records else None
+            jsonpath_results = {}
+            
+            # Test configured JSONPaths
+            if api_config.records_jsonpath:
+                try:
+                    jsonpath_expr = parse(api_config.records_jsonpath)
+                    matches = [match.value for match in jsonpath_expr.find(response_data)]
+                    jsonpath_results['records'] = f"Found {len(matches)} records using {api_config.records_jsonpath}"
+                except Exception as e:
+                    jsonpath_results['records'] = f"Error with {api_config.records_jsonpath}: {str(e)}"
+            
+            if api_config.total_count_jsonpath:
+                try:
+                    jsonpath_expr = parse(api_config.total_count_jsonpath)
+                    matches = [match.value for match in jsonpath_expr.find(response_data)]
+                    jsonpath_results['total_count'] = f"Found total: {matches[0] if matches else 'None'} using {api_config.total_count_jsonpath}"
+                except Exception as e:
+                    jsonpath_results['total_count'] = f"Error with {api_config.total_count_jsonpath}: {str(e)}"
+            
+            if api_config.next_page_token_jsonpath:
+                try:
+                    jsonpath_expr = parse(api_config.next_page_token_jsonpath)
+                    matches = [match.value for match in jsonpath_expr.find(response_data)]
+                    jsonpath_results['next_page_token'] = f"Found token: {matches[0] if matches else 'None'} using {api_config.next_page_token_jsonpath}"
+                except Exception as e:
+                    jsonpath_results['next_page_token'] = f"Error with {api_config.next_page_token_jsonpath}: {str(e)}"
+            
             sample_data = {
-                'records_fetched': 100,
-                'sample_record': {
-                    'id': 1,
-                    'timestamp': '2024-01-01T00:00:00Z',
-                    'data': 'Sample data record'
-                },
+                'records_fetched': len(records),
+                'total_count': total_count,
+                'sample_record': sample_record,
                 'parsed_successfully': True,
-                'jsonpath_results': {
-                    'records': '$.data.items[*]',
-                    'total_count': '$.pagination.total'
-                }
+                'jsonpath_results': jsonpath_results,
+                'response_status': response.status_code,
+                'response_headers': dict(response.headers),
+                'api_endpoint': api_config.mask_endpoint(),
+                'method': api_config.method
             }
             
             return Response({
                 'detail': 'Dry run completed successfully',
                 'sampleData': sample_data
             }, status=status.HTTP_200_OK)
+            
+        except requests.exceptions.Timeout:
+            return Response({
+                'detail': 'Dry run failed: Request timeout'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except requests.exceptions.ConnectionError:
+            return Response({
+                'detail': 'Dry run failed: Unable to connect to API endpoint'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except requests.exceptions.HTTPError as e:
+            return Response({
+                'detail': f'Dry run failed: HTTP {e.response.status_code} - {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except json.JSONDecodeError:
+            return Response({
+                'detail': 'Dry run failed: Invalid JSON response from API'
+            }, status=status.HTTP_400_BAD_REQUEST)
             
         except Exception as e:
             return Response({
@@ -2187,3 +2369,539 @@ class IFRSApiConfigViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(configs, many=True)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def execute_api(self, request, pk=None):
+        """
+        Execute API configuration manually and create a batch
+        """
+        from django.utils import timezone
+        from model_definitions.models import DataUploadBatch, DataUpload, APIUploadLog
+        import uuid
+        import requests
+        
+        api_config = self.get_object()
+        
+        if api_config.status != 'active':
+            return Response({
+                'detail': 'API configuration is not active'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate API endpoint URL
+        if not api_config.api_endpoint or not api_config.api_endpoint.startswith(('http://', 'https://')):
+            return Response({
+                'detail': f'Invalid API endpoint: {api_config.api_endpoint}. Must start with http:// or https://'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Execute the actual API call
+            api_data, records_count = self._execute_full_api_call(api_config)
+            
+            # Create API batch
+            batch_name = f"API Pull - {api_config.api_source_name}"
+            api_batch = DataUploadBatch.objects.create(
+                name=batch_name,
+                batch_type='api',
+                batch_model='GMM',  # Default, can be made configurable
+                insurance_type='direct',  # Default, can be made configurable
+                batch_year=timezone.now().year,
+                batch_quarter=f'Q{(timezone.now().month - 1) // 3 + 1}',
+                created_by=request.user,
+                last_modified_by=request.user,
+                api_config=api_config,
+                schedule=api_config.schedule,
+                last_run_date=timezone.now()
+            )
+            
+            # Create data upload record
+            data_upload = DataUpload.objects.create(
+                batch=api_batch,
+                source='api',
+                insurance_type='direct_insurance',
+                data_type=api_config.data_type,
+                quarter=api_batch.batch_quarter,
+                year=api_batch.batch_year,
+                uploaded_by=request.user,
+                validation_status='validated',
+                rows_processed=records_count,
+                api_payload=api_data
+            )
+            
+            # Calculate summary values for API log
+            sum_premiums, sum_claims, sum_commissions = self._calculate_summary_values(api_data, api_config.data_type)
+            
+            # Create API upload log
+            api_log = APIUploadLog.objects.create(
+                reporting_date=timezone.now().date(),
+                status='success',
+                data_upload=data_upload,
+                sum_of_premiums=sum_premiums,
+                sum_of_paid_claims=sum_claims,
+                sum_of_commissions=sum_commissions,
+                api_payload={
+                    'api_config_id': api_config.id, 
+                    'execution_type': 'manual',
+                    'records_processed': records_count,
+                    'endpoint': api_config.mask_endpoint()
+                }
+            )
+            
+            # Update API config last run date
+            api_config.last_run_date = timezone.now()
+            api_config.save()
+            
+            # Mark batch as completed
+            api_batch.batch_status = 'completed'
+            api_batch.save()
+            
+            return Response({
+                'detail': 'API executed successfully',
+                'batch': {
+                    'id': api_batch.id,
+                    'batchId': api_batch.batch_id,
+                    'name': api_batch.name,
+                    'batchStatus': api_batch.batch_status,
+                    'lastRunDate': api_batch.last_run_date.isoformat() if api_batch.last_run_date else None
+                },
+                'apiLog': {
+                    'id': api_log.id,
+                    'status': api_log.status,
+                    'reportingDate': api_log.reporting_date.isoformat()
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except requests.exceptions.Timeout:
+            # Create failed API log
+            try:
+                api_log = APIUploadLog.objects.create(
+                    reporting_date=timezone.now().date(),
+                    status='failed',
+                    error_message='API request timeout',
+                    api_payload={'api_config_id': api_config.id, 'execution_type': 'manual', 'error': 'timeout'}
+                )
+            except:
+                pass
+                
+            return Response({
+                'detail': 'API execution failed: Request timeout'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        except requests.exceptions.ConnectionError:
+            # Create failed API log
+            try:
+                api_log = APIUploadLog.objects.create(
+                    reporting_date=timezone.now().date(),
+                    status='failed',
+                    error_message='Unable to connect to API endpoint',
+                    api_payload={'api_config_id': api_config.id, 'execution_type': 'manual', 'error': 'connection_error'}
+                )
+            except:
+                pass
+                
+            return Response({
+                'detail': 'API execution failed: Unable to connect to API endpoint'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        except requests.exceptions.HTTPError as e:
+            # Create failed API log
+            try:
+                api_log = APIUploadLog.objects.create(
+                    reporting_date=timezone.now().date(),
+                    status='failed',
+                    error_message=f'HTTP {e.response.status_code} - {str(e)}',
+                    api_payload={'api_config_id': api_config.id, 'execution_type': 'manual', 'error': 'http_error', 'status_code': e.response.status_code}
+                )
+            except:
+                pass
+                
+            return Response({
+                'detail': f'API execution failed: HTTP {e.response.status_code} - {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        except ValueError as e:
+            # Handle invalid URL or configuration errors
+            try:
+                api_log = APIUploadLog.objects.create(
+                    reporting_date=timezone.now().date(),
+                    status='failed',
+                    error_message=str(e),
+                    api_payload={'api_config_id': api_config.id, 'execution_type': 'manual', 'error': 'configuration_error'}
+                )
+            except:
+                pass
+                
+            return Response({
+                'detail': f'API execution failed: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            # Create failed API log
+            try:
+                api_log = APIUploadLog.objects.create(
+                    reporting_date=timezone.now().date(),
+                    status='failed',
+                    error_message=str(e),
+                    api_payload={'api_config_id': api_config.id, 'execution_type': 'manual', 'error': 'general_error'}
+                )
+            except:
+                pass
+                
+            return Response({
+                'detail': f'API execution failed: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _prepare_headers(self, api_config):
+        """Prepare headers for API request"""
+        headers = {'Content-Type': 'application/json'}
+        
+        # Add custom headers from configuration
+        if api_config.headers_query_params:
+            for key, value in api_config.headers_query_params.items():
+                if key.lower().startswith('header_'):
+                    header_name = key[7:]  # Remove 'header_' prefix
+                    headers[header_name] = value
+        
+        return headers
+    
+    def _prepare_auth(self, api_config):
+        """Prepare authentication for API request"""
+        import requests.auth
+        
+        if api_config.auth_type == 'none':
+            return None
+        elif api_config.auth_type == 'basic':
+            # Extract username and password from secret references
+            username = api_config.secret_references.get('username', '')
+            password = api_config.secret_references.get('password', '')
+            return requests.auth.HTTPBasicAuth(username, password)
+        elif api_config.auth_type == 'bearer':
+            # Bearer token will be added to headers
+            token = api_config.secret_references.get('token', '')
+            return None  # Token will be added to headers in _prepare_headers
+        elif api_config.auth_type == 'api_key':
+            # API key will be added as query parameter or header
+            return None
+        elif api_config.auth_type == 'oauth':
+            # OAuth implementation would go here
+            return None
+        
+        return None
+    
+    def _prepare_test_params(self, api_config):
+        """Prepare parameters for connection test"""
+        params = {}
+        
+        # Add custom query parameters from configuration
+        if api_config.headers_query_params:
+            for key, value in api_config.headers_query_params.items():
+                if not key.lower().startswith('header_'):
+                    params[key] = value
+        
+        # Add API key if configured
+        if api_config.auth_type == 'api_key':
+            api_key = api_config.secret_references.get('api_key', '')
+            if api_key:
+                # Common API key parameter names
+                for key_name in ['api_key', 'apikey', 'key', 'token']:
+                    if key_name in api_config.headers_query_params:
+                        params[key_name] = api_key
+                        break
+                else:
+                    params['api_key'] = api_key
+        
+        # Add limit for test (try to get just 1 record)
+        if api_config.pagination_strategy != 'none':
+            if api_config.limit_param_name:
+                params[api_config.limit_param_name] = 1
+            else:
+                # Try common limit parameter names
+                for limit_name in ['limit', 'size', 'count', 'per_page']:
+                    params[limit_name] = 1
+                    break
+        
+        return params
+    
+    def _prepare_dry_run_params(self, api_config):
+        """Prepare parameters for dry run (limit to 100 records)"""
+        params = {}
+        
+        # Add custom query parameters from configuration
+        if api_config.headers_query_params:
+            for key, value in api_config.headers_query_params.items():
+                if not key.lower().startswith('header_'):
+                    params[key] = value
+        
+        # Add API key if configured
+        if api_config.auth_type == 'api_key':
+            api_key = api_config.secret_references.get('api_key', '')
+            if api_key:
+                # Common API key parameter names
+                for key_name in ['api_key', 'apikey', 'key', 'token']:
+                    if key_name in api_config.headers_query_params:
+                        params[key_name] = api_key
+                        break
+                else:
+                    params['api_key'] = api_key
+        
+        # Add limit for dry run (100 records)
+        if api_config.pagination_strategy != 'none':
+            limit_value = min(api_config.limit_value or 100, 100)
+            if api_config.limit_param_name:
+                params[api_config.limit_param_name] = limit_value
+            else:
+                # Try common limit parameter names
+                for limit_name in ['limit', 'size', 'count', 'per_page']:
+                    params[limit_name] = limit_value
+                    break
+        
+        # Add watermark if configured
+        if api_config.watermark_field_name and api_config.default_initial_watermark:
+            if api_config.watermark_location == 'query_param':
+                params[api_config.watermark_field_name] = api_config.default_initial_watermark
+        
+        return params
+    
+    def _execute_full_api_call(self, api_config):
+        """Execute the full API call with pagination handling"""
+        import requests
+        import json
+        from jsonpath_ng import parse
+        from datetime import datetime
+        import time
+        
+        # Validate API endpoint URL
+        if not api_config.api_endpoint or not api_config.api_endpoint.startswith(('http://', 'https://')):
+            raise ValueError(f'Invalid API endpoint: {api_config.api_endpoint}. Must start with http:// or https://')
+        
+        all_records = []
+        page = 1
+        next_token = None
+        total_requests = 0
+        max_requests = 1000  # Safety limit
+        
+        while total_requests < max_requests:
+            # Prepare parameters for this page
+            params = self._prepare_full_api_params(api_config, page, next_token)
+            
+            # Prepare headers and authentication
+            headers = self._prepare_headers(api_config)
+            auth = self._prepare_auth(api_config)
+            
+            # Add bearer token to headers if needed
+            if api_config.auth_type == 'bearer':
+                token = api_config.secret_references.get('token', '')
+                if token:
+                    headers['Authorization'] = f'Bearer {token}'
+            
+            # Rate limiting
+            if total_requests > 0 and api_config.max_rps > 0:
+                time.sleep(1.0 / api_config.max_rps)
+            
+            # Make the request
+            response = requests.request(
+                method=api_config.method,
+                url=api_config.api_endpoint,
+                headers=headers,
+                auth=auth,
+                params=params if api_config.method == 'GET' else None,
+                json=params if api_config.method == 'POST' else None,
+                timeout=api_config.timeout_ms / 1000 if api_config.timeout_ms else 30,
+                verify=api_config.tls_required
+            )
+            
+            response.raise_for_status()
+            total_requests += 1
+            
+            # Parse response
+            response_data = response.json()
+            
+            # Extract records using JSONPath if configured
+            page_records = []
+            if api_config.records_jsonpath:
+                try:
+                    jsonpath_expr = parse(api_config.records_jsonpath)
+                    page_records = [match.value for match in jsonpath_expr.find(response_data)]
+                except Exception:
+                    # Fallback to common patterns
+                    if isinstance(response_data, list):
+                        page_records = response_data
+                    elif isinstance(response_data, dict):
+                        for field in ['data', 'items', 'records', 'results']:
+                            if field in response_data and isinstance(response_data[field], list):
+                                page_records = response_data[field]
+                                break
+            else:
+                # Try common patterns
+                if isinstance(response_data, list):
+                    page_records = response_data
+                elif isinstance(response_data, dict):
+                    for field in ['data', 'items', 'records', 'results']:
+                        if field in response_data and isinstance(response_data[field], list):
+                            page_records = response_data[field]
+                            break
+            
+            all_records.extend(page_records)
+            
+            # Check for next page
+            has_next_page = False
+            next_token = None
+            
+            if api_config.pagination_strategy == 'page_limit':
+                # Check if we got a full page (indicating more data might exist)
+                expected_page_size = api_config.limit_value or 100
+                has_next_page = len(page_records) >= expected_page_size
+                page += 1
+                
+            elif api_config.pagination_strategy == 'cursor_next_token':
+                # Extract next token using JSONPath
+                if api_config.next_page_token_jsonpath:
+                    try:
+                        jsonpath_expr = parse(api_config.next_page_token_jsonpath)
+                        token_matches = [match.value for match in jsonpath_expr.find(response_data)]
+                        if token_matches and token_matches[0]:
+                            next_token = token_matches[0]
+                            has_next_page = True
+                    except Exception:
+                        pass
+                        
+            elif api_config.pagination_strategy == 'link_based':
+                # Check for Link header or next URL in response
+                link_header = response.headers.get('Link', '')
+                if 'rel="next"' in link_header:
+                    has_next_page = True
+                    # Extract next URL from Link header
+                    # Implementation would parse the Link header
+                    pass
+            
+            # Break if no more pages or if we have no new records
+            if not has_next_page or not page_records:
+                break
+        
+        # Prepare the final API data structure
+        api_data = {
+            'execution_time': datetime.now().isoformat(),
+            'total_records': len(all_records),
+            'total_requests': total_requests,
+            'records': all_records,
+            'api_config': {
+                'id': api_config.id,
+                'source_name': api_config.api_source_name,
+                'endpoint': api_config.mask_endpoint(),
+                'data_type': api_config.data_type
+            }
+        }
+        
+        return api_data, len(all_records)
+    
+    def _prepare_full_api_params(self, api_config, page=1, next_token=None):
+        """Prepare parameters for full API call with pagination"""
+        params = {}
+        
+        # Add custom query parameters from configuration
+        if api_config.headers_query_params:
+            for key, value in api_config.headers_query_params.items():
+                if not key.lower().startswith('header_'):
+                    params[key] = value
+        
+        # Add API key if configured
+        if api_config.auth_type == 'api_key':
+            api_key = api_config.secret_references.get('api_key', '')
+            if api_key:
+                # Common API key parameter names
+                for key_name in ['api_key', 'apikey', 'key', 'token']:
+                    if key_name in api_config.headers_query_params:
+                        params[key_name] = api_key
+                        break
+                else:
+                    params['api_key'] = api_key
+        
+        # Add pagination parameters
+        if api_config.pagination_strategy == 'page_limit':
+            if api_config.page_param_name:
+                params[api_config.page_param_name] = page
+            else:
+                params['page'] = page
+                
+            if api_config.limit_param_name:
+                params[api_config.limit_param_name] = api_config.limit_value or 100
+            else:
+                params['limit'] = api_config.limit_value or 100
+                
+        elif api_config.pagination_strategy == 'cursor_next_token' and next_token:
+            if api_config.page_param_name:
+                params[api_config.page_param_name] = next_token
+            else:
+                params['cursor'] = next_token
+                
+            if api_config.limit_param_name:
+                params[api_config.limit_param_name] = api_config.limit_value or 100
+        
+        # Add watermark if configured
+        if api_config.watermark_field_name:
+            watermark_value = api_config.default_initial_watermark
+            # In a real implementation, you'd get the last watermark from previous runs
+            if api_config.watermark_location == 'query_param' and watermark_value:
+                params[api_config.watermark_field_name] = watermark_value
+        
+        return params
+    
+    def _calculate_summary_values(self, api_data, data_type):
+        """Calculate summary values from API data for logging"""
+        from decimal import Decimal
+        
+        sum_premiums = None
+        sum_claims = None
+        sum_commissions = None
+        
+        try:
+            records = api_data.get('records', [])
+            
+            if data_type.lower() in ['premiums', 'premium']:
+                # Try to find premium amounts in the records
+                total = 0
+                for record in records:
+                    if isinstance(record, dict):
+                        # Try common field names for premium amounts
+                        for field in ['amount', 'premium', 'premium_amount', 'value', 'total']:
+                            if field in record:
+                                try:
+                                    total += float(record[field])
+                                    break
+                                except (ValueError, TypeError):
+                                    continue
+                sum_premiums = Decimal(str(total)) if total > 0 else None
+                
+            elif data_type.lower() in ['claims', 'claims_paid']:
+                # Try to find claim amounts in the records
+                total = 0
+                for record in records:
+                    if isinstance(record, dict):
+                        # Try common field names for claim amounts
+                        for field in ['amount', 'claim_amount', 'paid_amount', 'value', 'total']:
+                            if field in record:
+                                try:
+                                    total += float(record[field])
+                                    break
+                                except (ValueError, TypeError):
+                                    continue
+                sum_claims = Decimal(str(total)) if total > 0 else None
+                
+            elif data_type.lower() in ['commissions', 'commissions_paid']:
+                # Try to find commission amounts in the records
+                total = 0
+                for record in records:
+                    if isinstance(record, dict):
+                        # Try common field names for commission amounts
+                        for field in ['amount', 'commission', 'commission_amount', 'value', 'total']:
+                            if field in record:
+                                try:
+                                    total += float(record[field])
+                                    break
+                                except (ValueError, TypeError):
+                                    continue
+                sum_commissions = Decimal(str(total)) if total > 0 else None
+                
+        except Exception as e:
+            # If calculation fails, just log the error and continue
+            print(f"Error calculating summary values: {str(e)}")
+        
+        return sum_premiums, sum_claims, sum_commissions

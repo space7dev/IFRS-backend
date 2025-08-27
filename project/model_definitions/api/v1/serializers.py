@@ -306,6 +306,7 @@ class ModelDefinitionHistorySerializer(serializers.ModelSerializer):
 class DataUploadBatchSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     last_modified_by_name = serializers.SerializerMethodField()
+    api_config_name = serializers.SerializerMethodField()
     
     class Meta:
         model = DataUploadBatch
@@ -326,6 +327,11 @@ class DataUploadBatchSerializer(serializers.ModelSerializer):
             'upload_count',
             'created_on',
             'modified_on',
+            'api_config',
+            'api_config_name',
+            'schedule',
+            'last_run_date',
+            'next_run_date',
         ]
         read_only_fields = [
             'id', 'batch_id', 'created_by', 'last_modified_by', 'upload_count', 'created_on', 'modified_on'
@@ -346,6 +352,11 @@ class DataUploadBatchSerializer(serializers.ModelSerializer):
                 return full_name
             return f"{obj.last_modified_by.username}"
         return "Unknown"
+    
+    def get_api_config_name(self, obj):
+        if obj.api_config:
+            return f"{obj.api_config.api_source_name} - {obj.api_config.client_id}"
+        return None
     
     def create(self, validated_data):
         request = self.context.get('request')

@@ -101,6 +101,7 @@ class DataUploadBatch(TimeStampedMixin):
     BATCH_TYPE_CHOICES = [
         ('custom', 'Custom'),
         ('staging', 'Staging'),
+        ('api', 'API'),
     ]
     
     BATCH_MODEL_CHOICES = [
@@ -170,6 +171,37 @@ class DataUploadBatch(TimeStampedMixin):
         default='pending'
     )
     upload_count = models.IntegerField(default=0)
+    
+    api_config = models.ForeignKey(
+        'IFRSApiConfig',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='api_batches',
+        help_text="API configuration used for this batch (for API batch type only)"
+    )
+    schedule = models.CharField(
+        max_length=20,
+        choices=[
+            ('manual', 'Manual'),
+            ('daily', 'Daily'),
+            ('weekly', 'Weekly'),
+            ('monthly', 'Monthly'),
+            ('quarterly', 'Quarterly'),
+        ],
+        default='manual',
+        help_text="Execution schedule for API batches"
+    )
+    last_run_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last execution date for API batches"
+    )
+    next_run_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Next scheduled execution date for API batches"
+    )
     
     class Meta:
         ordering = ['-created_on']
