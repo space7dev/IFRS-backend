@@ -11,6 +11,10 @@ from django.utils import timezone
 from django.db import transaction
 from django.http import HttpResponse, Http404
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType, IFRSEngineResult, IFRSEngineInput, IFRSApiConfig
 from .serializers import (
     ModelDefinitionListSerializer,
@@ -1345,6 +1349,48 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                     'error': 'Cannot generate Excel for failed report'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
+            if result.report_type == 'disclosure_report':
+                import base64
+                from django.http import HttpResponse
+                
+                if not isinstance(result.result_json, dict):
+                    return Response({
+                        'error': 'Invalid result JSON structure',
+                        'result_type': str(type(result.result_json))
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                if 'error' in result.result_json:
+                    return Response({
+                        'error': 'Engine execution failed',
+                        'details': result.result_json.get('error'),
+                        'stdout': result.result_json.get('stdout', 'No stdout'),
+                        'stderr': result.result_json.get('stderr', 'No stderr'),
+                        'return_code': result.result_json.get('return_code'),
+                        'traceback': result.result_json.get('traceback', 'No traceback available')
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                if 'excel_bytes' not in result.result_json:
+                    return Response({
+                        'error': 'Disclosure report Excel not found in result',
+                        'available_keys': list(result.result_json.keys()),
+                        'status': result.result_json.get('status', 'unknown')
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                try:
+                    excel_bytes = base64.b64decode(result.result_json['excel_bytes'])
+                    
+                    response = HttpResponse(
+                        excel_bytes, 
+                        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    )
+                    response['Content-Disposition'] = f'attachment; filename="disclosure_report_{result.run_id}.xlsx"'
+                    return response
+                except Exception as e:
+                    return Response({
+                        'error': 'Failed to decode Excel bytes',
+                        'details': str(e)
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
             from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
             from openpyxl.workbook import Workbook
             from openpyxl.worksheet.table import Table, TableStyleInfo
@@ -1839,6 +1885,7 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
         import os
         import subprocess
         import tempfile
+        import sys
         
         engine_input = {
             'run_id': run_id,
@@ -1888,8 +1935,10 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                 script_path = script_file.name
             
             try:
+                python_executable = sys.executable
+                
                 result = subprocess.run(
-                    ['python', script_path, input_file],
+                    [python_executable, script_path, input_file],
                     capture_output=True,
                     text=True,
                     timeout=300
@@ -1962,6 +2011,10 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
         import os
         import subprocess
         import tempfile
+        import sys
+        from django.conf import settings
+        
+        current_lob = line_of_businesses[0] if line_of_businesses else None
         
         engine_input = {
             'run_id': run_id,
@@ -1976,6 +2029,13 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                 'insurance_type': batch.insurance_type,
                 'batch_year': batch.batch_year,
                 'batch_quarter': batch.batch_quarter,
+            },
+            'current_lob': {
+                'id': current_lob.id if current_lob else None,
+                'line_of_business': current_lob.line_of_business if current_lob else 'All LOBs',
+                'batch_model': current_lob.batch_model if current_lob else batch.batch_model,
+                'insurance_type': current_lob.insurance_type if current_lob else batch.insurance_type,
+                'currency': current_lob.currency.code if current_lob and current_lob.currency else 'USD',
             },
             'line_of_businesses': [
                 {
@@ -2000,27 +2060,44 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
             input_file = f.name
         
         try:
-            if not ifrs_engine:
-                return {
-                    'error': 'IFRS engine not provided',
-                    'run_id': run_id
-                }
+            is_temp_script = False
             
-            if not ifrs_engine.script:
-                return {
-                    'error': f'No script uploaded for engine {ifrs_engine.engine_type}',
-                    'run_id': run_id
-                }
-            
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as script_file:
-                script_content = ifrs_engine.script.read().decode('utf-8')
-                script_file.write(script_content)
-                script_file.flush()
-                script_path = script_file.name
+            if report_type.report_type == 'disclosure_report':
+                script_path = os.path.join(settings.BASE_DIR, 'disclosure_ifrs_engine.py')
+                is_temp_script = False
+                if not os.path.exists(script_path):
+                    return {
+                        'error': 'Disclosure IFRS engine not found',
+                        'run_id': run_id
+                    }
+            else:
+                if not ifrs_engine:
+                    return {
+                        'error': 'IFRS engine not provided',
+                        'run_id': run_id
+                    }
+                
+                if not ifrs_engine.script:
+                    script_path = os.path.join(settings.BASE_DIR, 'ifrs_engine.py')
+                    is_temp_script = False
+                    if not os.path.exists(script_path):
+                        return {
+                            'error': f'No script uploaded for engine {ifrs_engine.engine_type} and no default engine found',
+                            'run_id': run_id
+                        }
+                else:
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as script_file:
+                        script_content = ifrs_engine.script.read().decode('utf-8')
+                        script_file.write(script_content)
+                        script_file.flush()
+                        script_path = script_file.name
+                        is_temp_script = True
             
             try:
+                python_executable = sys.executable
+                
                 result = subprocess.run(
-                    ['python', script_path, input_file],
+                    [python_executable, script_path, input_file],
                     capture_output=True,
                     text=True,
                     timeout=300
@@ -2038,19 +2115,25 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                             'run_id': run_id
                         }
                 else:
-                    return {
+                    import traceback as tb
+                    error_details = {
                         'error': 'Engine execution failed',
                         'stdout': result.stdout,
                         'stderr': result.stderr,
                         'return_code': result.returncode,
-                        'run_id': run_id
+                        'run_id': run_id,
+                        'script_path': script_path,
+                        'input_file': input_file
                     }
+                    logger.error(f"Engine execution failed: {error_details}")
+                    return error_details
                     
             finally:
-                try:
-                    os.unlink(script_path)
-                except:
-                    pass
+                if is_temp_script:
+                    try:
+                        os.unlink(script_path)
+                    except:
+                        pass
                     
         except subprocess.TimeoutExpired:
             return {
