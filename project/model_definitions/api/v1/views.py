@@ -15,7 +15,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType, IFRSEngineResult, IFRSEngineInput, IFRSApiConfig
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType, IFRSEngineResult, IFRSEngineInput, IFRSApiConfig, CalculationValue, AssumptionReference, InputDataReference
 from .serializers import (
     ModelDefinitionListSerializer,
     ModelDefinitionDetailSerializer,
@@ -57,8 +57,13 @@ from .serializers import (
     IFRSApiConfigUpdateSerializer,
     IFRSEngineResultSerializer,
     IFRSEngineResultCreateSerializer,
+    IFRSEngineInputSerializer,
     ReportGenerationSerializer,
-    IFRSEngineInputSerializer
+    CalculationValueSerializer,
+    AssumptionReferenceSerializer,
+    InputDataReferenceSerializer,
+    RunSummarySerializer,
+    ReportMetadataSerializer,
 )
 
 
@@ -1854,6 +1859,25 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                             )
                             results.append(result)
                             
+                            if report_type.report_type == 'disclosure_report' and 'calculations' in engine_result:
+                                try:
+                                    from model_definitions.utils.audit_helper import populate_disclosure_report_audit_trail
+                                    
+                                    calculations = engine_result.get('calculations', {})
+                                    metadata = engine_result.get('metadata', {})
+                                    
+                                    audit_count = populate_disclosure_report_audit_trail(
+                                        engine_result=result,
+                                        calculations=calculations,
+                                        metadata=metadata,
+                                        run_id=run_id,
+                                        calc_engine_version='1.0.0'
+                                    )
+                                    
+                                    logger.info(f"Created {audit_count} audit trail records for disclosure report {run_id}")
+                                except Exception as audit_error:
+                                    logger.error(f"Failed to populate audit trail: {str(audit_error)}")
+                            
                         except Exception as e:
                             result = IFRSEngineResult.objects.create(
                                 run_id=run_id,
@@ -2270,3 +2294,210 @@ class IFRSApiConfigViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(configs, many=True)
         return Response(serializer.data)
+
+
+class AuditViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CalculationValue.objects.all()
+    serializer_class = CalculationValueSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['run_id', 'value_id', 'report_type']
+    search_fields = ['value_id', 'label', 'run_id']
+    ordering_fields = ['value_id', 'timestamp']
+    ordering = ['value_id']
+    
+    @action(detail=False, methods=['get'])
+    def runs_by_period(self, request):
+        try:
+            results = IFRSEngineResult.objects.values(
+                'run_id',
+                'year',
+                'quarter',
+                'model_type',
+                'currency',
+                'status',
+                'created_at'
+            ).distinct().order_by('-created_at')
+            
+            runs_dict = {}
+            for result in results:
+                run_id = result['run_id']
+                if run_id not in runs_dict:
+                    report_types = IFRSEngineResult.objects.filter(
+                        run_id=run_id
+                    ).values_list('report_type', flat=True).distinct()
+                    
+                    runs_dict[run_id] = {
+                        'run_id': run_id,
+                        'period': f"{result['year']} {result['quarter']}",
+                        'legal_entity': 'Default Entity',  # TODO: Get from config
+                        'currency': result['currency'] or 'USD',
+                        'status': 'Final' if result['status'] == 'Success' else 'Draft',
+                        'execution_date': result['created_at'],
+                        'model_type': result['model_type'],
+                        'available_reports': list(report_types)
+                    }
+            
+            runs_list = list(runs_dict.values())
+            serializer = RunSummarySerializer(runs_list, many=True)
+            
+            return Response({
+                'detail': 'Success',
+                'results': serializer.data
+            })
+            
+        except Exception as e:
+            logger.error(f"Error fetching runs: {str(e)}")
+            return Response({
+                'detail': f'Error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
+    def reports_by_run(self, request):
+        run_id = request.query_params.get('run_id')
+        
+        if not run_id:
+            return Response({
+                'detail': 'run_id parameter is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            results = IFRSEngineResult.objects.filter(run_id=run_id).values(
+                'id',
+                'report_type',
+                'status'
+            )
+            
+            report_data = []
+            for result in results:
+                value_count = 0
+                try:
+                    value_count = CalculationValue.objects.filter(
+                        run_id=run_id,
+                        report_type=result['report_type']
+                    ).count()
+                except Exception:
+                    value_count = 0
+                
+                report_data.append({
+                    'report_type': result['report_type'],
+                    'report_type_display': result['report_type'].replace('_', ' ').title(),
+                    'status': result['status'],
+                    'value_count': value_count
+                })
+            
+            serializer = ReportMetadataSerializer(report_data, many=True)
+            
+            return Response({
+                'detail': 'Success',
+                'results': serializer.data
+            })
+            
+        except Exception as e:
+            logger.error(f"Error fetching reports for run {run_id}: {str(e)}")
+            return Response({
+                'detail': f'Error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
+    def value_detail(self, request):
+        run_id = request.query_params.get('run_id')
+        value_id = request.query_params.get('value_id')
+        
+        if not run_id or not value_id:
+            return Response({
+                'detail': 'Both run_id and value_id parameters are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            calc_value = CalculationValue.objects.prefetch_related(
+                'assumptions',
+                'input_refs'
+            ).get(run_id=run_id, value_id=value_id)
+            
+            serializer = CalculationValueSerializer(calc_value)
+            
+            return Response({
+                'detail': 'Success',
+                'result': serializer.data
+            })
+            
+        except CalculationValue.DoesNotExist:
+            try:
+                engine_results = IFRSEngineResult.objects.filter(
+                    run_id=run_id,
+                    report_type='disclosure_report'
+                )
+                
+                for result in engine_results:
+                    result_json = result.result_json
+                    
+                    if isinstance(result_json, dict) and 'calculations' in result_json:
+                        calculations = result_json['calculations']
+                        metadata = result_json.get('metadata', {})
+                        
+                        for key, calc_data in calculations.items():
+                            if calc_data.get('value_id') == value_id:
+                                period = f"{metadata.get('year', '')} {metadata.get('quarter', '')}"
+                                legal_entity = metadata.get('legal_entity_name', 'Unknown')
+                                currency = metadata.get('currency_name', 'USD')
+                                label = value_id.replace('_', ' ').replace('.', ' - ')
+                                amount = calc_data.get('amount', 0)
+                                
+                                fallback_data = {
+                                    'valueId': value_id,
+                                    'runId': run_id,
+                                    'reportType': 'disclosure_report',
+                                    'period': period,
+                                    'legalEntity': legal_entity,
+                                    'currency': currency,
+                                    'label': label,
+                                    'value': float(amount),
+                                    'unit': 'currency',
+                                    'lineOfBusiness': metadata.get('run_name', ''),
+                                    'cohort': None,
+                                    'groupId': None,
+                                    'formulaHumanReadable': None,
+                                    'dependencies': [],
+                                    'calculationMethod': metadata.get('method_name', 'PAA').split()[0],
+                                    'notes': 'Temporary data from classification engine - full audit trail not yet available',
+                                    'isMissingData': False,
+                                    'isOverride': False,
+                                    'isFallback': True,
+                                    'hasRounding': False,
+                                    'calcEngineVersion': '1.0.0',
+                                    'timestamp': result_json.get('calculation_date', ''),
+                                    'assumptions': [],
+                                    'inputRefs': []
+                                }
+                                
+                                return Response({
+                                    'detail': 'Success (Fallback Mode)',
+                                    'result': fallback_data
+                                })
+                
+                return Response({
+                    'detail': f'Value {value_id} not found in disclosure report for run {run_id}. The calculation engine needs to be updated to track audit metadata.'
+                }, status=status.HTTP_404_NOT_FOUND)
+                
+            except IFRSEngineResult.DoesNotExist:
+                return Response({
+                    'detail': f'No disclosure report found for run_id={run_id}'
+                }, status=status.HTTP_404_NOT_FOUND)
+            except Exception as fallback_error:
+                logger.error(f"Fallback extraction failed: {str(fallback_error)}")
+                return Response({
+                    'detail': f'Calculation value not found and fallback extraction failed: {str(fallback_error)}'
+                }, status=status.HTTP_404_NOT_FOUND)
+                
+        except Exception as e:
+            logger.error(f"Error fetching value detail: {str(e)}")
+            return Response({
+                'detail': f'Error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
+    def compare_runs(self, request):
+        return Response({
+            'detail': 'This feature will be available in Phase 2'
+        }, status=status.HTTP_501_NOT_IMPLEMENTED)

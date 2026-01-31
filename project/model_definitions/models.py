@@ -1223,3 +1223,215 @@ class IFRSEngineResult(models.Model):
     def __str__(self):
         return f"{self.model_type} - {self.report_type} - {self.year} {self.quarter} - {self.lob}"
 
+
+class CalculationValue(models.Model):
+    value_id = models.CharField(
+        max_length=200,
+        db_index=True,
+        help_text="Unique identifier for this value (e.g., 'DR.MA.Opening.Liabilities.Total')"
+    )
+    run_id = models.CharField(
+        max_length=50,
+        db_index=True,
+        help_text="Reference to engine run ID"
+    )
+    report_type = models.CharField(
+        max_length=50,
+        help_text="Type of report this value belongs to"
+    )
+    
+    period = models.CharField(
+        max_length=20,
+        help_text="Reporting period (e.g., '2026 Q4')"
+    )
+    legal_entity = models.CharField(
+        max_length=200,
+        help_text="Legal entity name"
+    )
+    currency = models.CharField(
+        max_length=10,
+        help_text="Currency code (e.g., 'USD', 'EUR')"
+    )
+    
+    label = models.CharField(
+        max_length=300,
+        help_text="Human-readable label/description"
+    )
+    value = models.DecimalField(
+        max_digits=20,
+        decimal_places=2,
+        help_text="Calculated numeric value"
+    )
+    unit = models.CharField(
+        max_length=50,
+        default='currency',
+        help_text="Unit of measurement (currency, percentage, count, etc.)"
+    )
+    
+    line_of_business = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Line of business"
+    )
+    cohort = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Cohort identifier"
+    )
+    group_id = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Group identifier"
+    )
+    
+    formula_human_readable = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Human-readable formula description"
+    )
+    dependencies = models.JSONField(
+        default=list,
+        help_text="List of value_ids this calculation depends on"
+    )
+    calculation_method = models.CharField(
+        max_length=20,
+        help_text="Calculation method (PAA, GMM, VFA)"
+    )
+    notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Optional calculation notes from engine"
+    )
+    
+    is_missing_data = models.BooleanField(
+        default=False,
+        help_text="Flag if calculation used missing/incomplete data"
+    )
+    is_override = models.BooleanField(
+        default=False,
+        help_text="Flag if value was manually overridden"
+    )
+    is_fallback = models.BooleanField(
+        default=False,
+        help_text="Flag if fallback logic was used"
+    )
+    has_rounding = models.BooleanField(
+        default=False,
+        help_text="Flag if rounding was applied"
+    )
+    
+    calc_engine_version = models.CharField(
+        max_length=50,
+        help_text="Calculation engine version"
+    )
+    timestamp = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Calculation timestamp"
+    )
+    
+    engine_result = models.ForeignKey(
+        'IFRSEngineResult',
+        on_delete=models.CASCADE,
+        related_name='calculation_values',
+        help_text="Parent IFRS engine result"
+    )
+    
+    class Meta:
+        ordering = ['value_id']
+        verbose_name = 'Calculation Value'
+        verbose_name_plural = 'Calculation Values'
+        indexes = [
+            models.Index(fields=['run_id', 'value_id']),
+            models.Index(fields=['run_id', 'report_type']),
+            models.Index(fields=['value_id']),
+        ]
+        db_table = 'calculation_values'
+        unique_together = [['run_id', 'value_id']]
+    
+    def __str__(self):
+        return f"{self.value_id} ({self.run_id})"
+
+
+class AssumptionReference(models.Model):
+    calculation_value = models.ForeignKey(
+        'CalculationValue',
+        on_delete=models.CASCADE,
+        related_name='assumptions',
+        help_text="Related calculation value"
+    )
+    
+    assumption_type = models.CharField(
+        max_length=100,
+        help_text="Type of assumption (discount_curve, risk_adjustment, etc.)"
+    )
+    assumption_id = models.CharField(
+        max_length=200,
+        help_text="Unique identifier for this assumption"
+    )
+    assumption_version = models.CharField(
+        max_length=50,
+        help_text="Version of the assumption"
+    )
+    effective_date = models.DateField(
+        help_text="Effective date of the assumption"
+    )
+    
+    metadata = models.JSONField(
+        default=dict,
+        help_text="Additional assumption-specific metadata"
+    )
+    
+    class Meta:
+        ordering = ['assumption_type', 'assumption_id']
+        verbose_name = 'Assumption Reference'
+        verbose_name_plural = 'Assumption References'
+        db_table = 'assumption_references'
+    
+    def __str__(self):
+        return f"{self.assumption_type}: {self.assumption_id} (v{self.assumption_version})"
+
+
+class InputDataReference(models.Model):
+    calculation_value = models.ForeignKey(
+        'CalculationValue',
+        on_delete=models.CASCADE,
+        related_name='input_refs',
+        help_text="Related calculation value"
+    )
+    
+    dataset_name = models.CharField(
+        max_length=200,
+        help_text="Name of the input dataset (premiums, claims, etc.)"
+    )
+    source_snapshot_id = models.CharField(
+        max_length=200,
+        help_text="Snapshot identifier for data version tracking"
+    )
+    source_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        null=True,
+        help_text="Hash of source data for change detection"
+    )
+    record_count = models.IntegerField(
+        default=0,
+        help_text="Number of records from this dataset"
+    )
+    
+    metadata = models.JSONField(
+        default=dict,
+        help_text="Additional dataset-specific metadata"
+    )
+    
+    class Meta:
+        ordering = ['dataset_name']
+        verbose_name = 'Input Data Reference'
+        verbose_name_plural = 'Input Data References'
+        db_table = 'input_data_references'
+    
+    def __str__(self):
+        return f"{self.dataset_name} ({self.record_count} records)"
+

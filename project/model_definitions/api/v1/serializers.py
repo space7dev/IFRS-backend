@@ -23,7 +23,10 @@ from model_definitions.models import (
     ReportType,
     IFRSEngineResult,
     IFRSEngineInput,
-    IFRSApiConfig
+    IFRSApiConfig,
+    CalculationValue,
+    AssumptionReference,
+    InputDataReference
 )
 
 User = get_user_model()
@@ -1421,3 +1424,84 @@ class ReportGenerationSerializer(serializers.Serializer):
         child=serializers.IntegerField(),
         min_length=1
     ) 
+
+
+class AssumptionReferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssumptionReference
+        fields = [
+            'id',
+            'assumption_type',
+            'assumption_id',
+            'assumption_version',
+            'effective_date',
+            'metadata'
+        ]
+
+
+class InputDataReferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InputDataReference
+        fields = [
+            'id',
+            'dataset_name',
+            'source_snapshot_id',
+            'source_hash',
+            'record_count',
+            'metadata'
+        ]
+
+
+class CalculationValueSerializer(serializers.ModelSerializer):
+    assumptions = AssumptionReferenceSerializer(many=True, read_only=True)
+    input_refs = InputDataReferenceSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = CalculationValue
+        fields = [
+            'id',
+            'value_id',
+            'run_id',
+            'report_type',
+            'period',
+            'legal_entity',
+            'currency',
+            'label',
+            'value',
+            'unit',
+            'line_of_business',
+            'cohort',
+            'group_id',
+            'formula_human_readable',
+            'dependencies',
+            'calculation_method',
+            'notes',
+            'is_missing_data',
+            'is_override',
+            'is_fallback',
+            'has_rounding',
+            'calc_engine_version',
+            'timestamp',
+            'assumptions',
+            'input_refs'
+        ]
+        read_only_fields = ['id', 'timestamp']
+
+
+class RunSummarySerializer(serializers.Serializer):
+    run_id = serializers.CharField()
+    period = serializers.CharField()
+    legal_entity = serializers.CharField()
+    currency = serializers.CharField()
+    status = serializers.CharField()
+    execution_date = serializers.DateTimeField()
+    model_type = serializers.CharField()
+    available_reports = serializers.ListField(child=serializers.CharField())
+
+
+class ReportMetadataSerializer(serializers.Serializer):
+    report_type = serializers.CharField()
+    report_type_display = serializers.CharField()
+    status = serializers.CharField()
+    value_count = serializers.IntegerField()
+ 
