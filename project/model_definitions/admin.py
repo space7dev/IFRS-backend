@@ -13,7 +13,8 @@ from .models import (
     Currency,
     LineOfBusiness,
     ReportType,
-    IFRSEngineResult
+    IFRSEngineResult,
+    SubmittedReport
 )
 
 @admin.register(ModelDefinition)
@@ -416,4 +417,28 @@ class IFRSEngineResultAdmin(admin.ModelAdmin):
             'fields': ['created_by', 'created_at'],
             'classes': ['collapse']
         })
+    ]
+
+
+@admin.register(SubmittedReport)
+class SubmittedReportAdmin(admin.ModelAdmin):
+    list_display = ['id', 'report_type', 'assign_year', 'assign_quarter', 'status', 'model_type', 'submitted_by', 'created_on']
+    list_filter = ['status', 'assign_year', 'assign_quarter', 'model_type', 'report_type']
+    search_fields = ['report_type', 'run_id', 'model_type']
+    ordering = ['-assign_year', '-assign_quarter', '-created_on']
+    readonly_fields = ['created_on', 'modified_on', 'submitted_by']
+    
+    fieldsets = [
+        ('Report Information', {
+            'fields': ['run_id', 'report_type', 'report_type_display', 'model_type', 'status']
+        }),
+        ('Period Assignment', {
+            'fields': ['assign_year', 'assign_quarter']
+        }),
+        ('Metadata', {
+            'fields': ['ifrs_engine_result_id', 'model_used', 'batch_used', 'line_of_business_used', 'conversion_engine_used', 'ifrs_engine_used']
+        }),
+        ('Audit', {
+            'fields': ['submitted_by', 'created_on', 'modified_on']
+        }),
     ]

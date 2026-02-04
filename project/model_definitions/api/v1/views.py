@@ -15,7 +15,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType, IFRSEngineResult, IFRSEngineInput, IFRSApiConfig, CalculationValue, AssumptionReference, InputDataReference
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType, IFRSEngineResult, IFRSEngineInput, IFRSApiConfig, CalculationValue, AssumptionReference, InputDataReference, SubmittedReport
 from .serializers import (
     ModelDefinitionListSerializer,
     ModelDefinitionDetailSerializer,
@@ -64,6 +64,8 @@ from .serializers import (
     InputDataReferenceSerializer,
     RunSummarySerializer,
     ReportMetadataSerializer,
+    SubmittedReportSerializer,
+    SubmittedReportCreateSerializer,
 )
 
 
@@ -1103,6 +1105,191 @@ class IFRSEngineInputViewSet(viewsets.ReadOnlyModelViewSet):
         return response
 
 
+class SubmittedReportViewSet(viewsets.ModelViewSet):
+    queryset = SubmittedReport.objects.all()
+    serializer_class = SubmittedReportSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['assign_year', 'assign_quarter', 'status', 'report_type', 'model_type']
+    search_fields = ['report_type', 'run_id']
+    ordering_fields = ['assign_year', 'assign_quarter', 'created_on']
+    ordering = ['-assign_year', '-assign_quarter', '-created_on']
+    
+    def get_queryset(self):
+        queryset = SubmittedReport.objects.all()
+        
+        year = self.request.query_params.get('year', None)
+        quarter = self.request.query_params.get('quarter', None)
+        report_type = self.request.query_params.get('report_type', None)
+        status_filter = self.request.query_params.get('status', None)
+        
+        if year:
+            queryset = queryset.filter(assign_year=year)
+        if quarter:
+            queryset = queryset.filter(assign_quarter=quarter)
+        if report_type:
+            queryset = queryset.filter(report_type__icontains=report_type)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        return queryset.order_by('-assign_year', '-assign_quarter', '-created_on')
+    
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 12))
+        
+        total_count = queryset.count()
+        start = (page - 1) * page_size
+        end = start + page_size
+        
+        results = queryset[start:end]
+        
+        serializer = self.get_serializer(results, many=True)
+        
+        total_pages = (total_count + page_size - 1) // page_size
+        has_next = page < total_pages
+        has_previous = page > 1
+        
+        return Response({
+            'count': total_count,
+            'next': f"?page={page + 1}&page_size={page_size}" if has_next else None,
+            'previous': f"?page={page - 1}&page_size={page_size}" if has_previous else None,
+            'results': serializer.data
+        })
+    
+    @action(detail=False, methods=['post'])
+    def submit_reports(self, request):
+        serializer = SubmittedReportCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        data = serializer.validated_data
+        report_ids = data['report_ids']
+        assign_year = data['assign_year']
+        assign_quarter = data['assign_quarter']
+        
+        ifrs_results = IFRSEngineResult.objects.filter(id__in=report_ids)
+        if not ifrs_results.exists():
+            return Response({'error': 'No reports found with provided IDs'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        submitted_reports = []
+        for result in ifrs_results:
+            model_name = ''
+            batch_info = ''
+            lob_info = ''
+            conversion_engine = ''
+            ifrs_engine = ''
+            
+            try:
+                engine_input = IFRSEngineInput.objects.get(run_id=result.run_id)
+                
+                if engine_input.model_definition:
+                    model_def = engine_input.model_definition
+                    model_name = f"{model_def.get('name', 'N/A')} (v{model_def.get('version', 'N/A')})"
+                
+                if engine_input.batch_data and len(engine_input.batch_data) > 0:
+                    batch_ids = [b.get('batch_id', '') for b in engine_input.batch_data if b.get('batch_id')]
+                    batch_info = ', '.join(batch_ids) if batch_ids else 'N/A'
+                
+                if engine_input.field_parameters and 'line_of_businesses' in engine_input.field_parameters:
+                    lobs = engine_input.field_parameters['line_of_businesses']
+                    lob_names = [lob.get('line_of_business', '') for lob in lobs if lob.get('line_of_business')]
+                    lob_info = ', '.join(lob_names) if lob_names else 'N/A'
+                
+                if engine_input.field_parameters:
+                    conversion_engine = f"{result.model_type} Conversion Engine"
+                    
+                    ifrs_engine_id = engine_input.field_parameters.get('ifrs_engine_id')
+                    if ifrs_engine_id:
+                        try:
+                            ifrs_calc_config = CalculationConfig.objects.get(id=ifrs_engine_id)
+                            ifrs_engine = ifrs_calc_config.engine_type
+                        except CalculationConfig.DoesNotExist:
+                            ifrs_engine = f"Engine ID: {ifrs_engine_id}"
+                    else:
+                        ifrs_engine = 'Default IFRS Engine'
+                        
+            except IFRSEngineInput.DoesNotExist:
+                model_name = 'N/A'
+                batch_info = 'N/A'
+                lob_info = 'N/A'
+                conversion_engine = f"{result.model_type} Conversion Engine"
+                ifrs_engine = 'Default IFRS Engine'
+            
+            submitted_report = SubmittedReport(
+                run_id=result.run_id,
+                report_type=result.report_type,
+                report_type_display=result.report_type,
+                model_type=result.model_type,
+                assign_year=assign_year,
+                assign_quarter=assign_quarter,
+                status='active',
+                ifrs_engine_result_id=result.id,
+                model_used=model_name,
+                batch_used=batch_info,
+                line_of_business_used=lob_info,
+                conversion_engine_used=conversion_engine,
+                ifrs_engine_used=ifrs_engine,
+                submitted_by=request.user
+            )
+            submitted_report.save()
+            submitted_reports.append(submitted_report)
+        
+        serializer = SubmittedReportSerializer(submitted_reports, many=True)
+        return Response({
+            'message': f'Successfully submitted {len(submitted_reports)} reports',
+            'reports': serializer.data
+        }, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['delete'])
+    def delete_submitted_report(self, request, pk=None):
+        try:
+            submitted_report = self.get_object()
+            submitted_report.delete()
+            return Response({
+                'detail': 'Submitted report deleted successfully'
+            }, status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response({
+                'error': f'Failed to delete submitted report: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['get'])
+    def download_excel(self, request, pk=None):
+        """Download submitted report Excel by delegating to the underlying IFRSEngineResult"""
+        try:
+            submitted_report = self.get_object()
+            
+            ifrs_result = IFRSEngineResult.objects.get(id=submitted_report.ifrs_engine_result_id)
+            
+            from rest_framework.request import Request
+            
+            ifrs_viewset = IFRSEngineResultViewSet()
+            ifrs_viewset.kwargs = {'pk': ifrs_result.id}
+            ifrs_viewset.request = request
+            ifrs_viewset.format_kwarg = None
+            
+            response = ifrs_viewset.download_excel(request, pk=ifrs_result.id)
+            
+            if response.status_code == 200:
+                response['Content-Disposition'] = f'attachment; filename="{submitted_report.report_type}_{submitted_report.assign_year}_Q{submitted_report.assign_quarter}.xlsx"'
+            
+            return response
+            
+        except IFRSEngineResult.DoesNotExist:
+            return Response({
+                'error': 'Report result not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            import traceback
+            return Response({
+                'error': f'Failed to download Excel: {str(e)}',
+                'traceback': traceback.format_exc()
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class IFRSEngineResultViewSet(viewsets.ModelViewSet):
     queryset = IFRSEngineResult.objects.all()
     serializer_class = IFRSEngineResultSerializer
@@ -1347,6 +1534,9 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
     def download_excel(self, request, pk=None):
         """Download IFRS engine result as Excel with enhanced formatting"""
         try:
+            from django.http import HttpResponse
+            import base64
+            
             result = self.get_object()
             
             if result.status != 'Success':
@@ -1355,8 +1545,6 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             if result.report_type == 'disclosure_report':
-                import base64
-                from django.http import HttpResponse
                 
                 if not isinstance(result.result_json, dict):
                     return Response({

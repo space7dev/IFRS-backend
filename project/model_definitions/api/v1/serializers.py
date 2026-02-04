@@ -26,7 +26,8 @@ from model_definitions.models import (
     IFRSApiConfig,
     CalculationValue,
     AssumptionReference,
-    InputDataReference
+    InputDataReference,
+    SubmittedReport
 )
 
 User = get_user_model()
@@ -1167,6 +1168,48 @@ class ReportTypeUpdateSerializer(serializers.ModelSerializer):
         super().__init__(*args, **kwargs)
         for field_name, field in self.fields.items():
             field.required = False
+
+
+class SubmittedReportSerializer(serializers.ModelSerializer):
+    submitted_by = serializers.CharField(source='submitted_by.username', read_only=True)
+    created_at = serializers.DateTimeField(source='created_on', read_only=True)
+    
+    class Meta:
+        model = SubmittedReport
+        fields = [
+            'id',
+            'run_id',
+            'report_type',
+            'report_type_display',
+            'model_type',
+            'assign_year',
+            'assign_quarter',
+            'status',
+            'ifrs_engine_result_id',
+            'model_used',
+            'batch_used',
+            'line_of_business_used',
+            'conversion_engine_used',
+            'ifrs_engine_used',
+            'submitted_by',
+            'created_at'
+        ]
+        read_only_fields = ['id', 'submitted_by', 'created_at']
+
+
+class SubmittedReportCreateSerializer(serializers.Serializer):
+    report_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        min_length=1,
+        help_text="List of IFRSEngineResult IDs to submit"
+    )
+    assign_year = serializers.IntegerField(
+        help_text="Year the reports are being submitted for"
+    )
+    assign_quarter = serializers.ChoiceField(
+        choices=['Q1', 'Q2', 'Q3', 'Q4'],
+        help_text="Quarter the reports are being submitted for"
+    )
 
 
 class IFRSEngineInputSerializer(serializers.ModelSerializer):

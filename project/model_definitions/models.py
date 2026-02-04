@@ -793,6 +793,109 @@ class ReportType(TimeStampedMixin):
         super().save(*args, **kwargs)
 
 
+class SubmittedReport(TimeStampedMixin):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('superseded', 'Superseded'),
+    ]
+    
+    QUARTER_CHOICES = [
+        ('Q1', 'Q1'),
+        ('Q2', 'Q2'),
+        ('Q3', 'Q3'),
+        ('Q4', 'Q4'),
+    ]
+    
+    run_id = models.CharField(
+        max_length=100,
+        help_text="Calculation Run ID (e.g., RUN-ABC12345678)"
+    )
+    report_type = models.CharField(
+        max_length=100,
+        help_text="Type of report (e.g., lrc_movement_report)"
+    )
+    report_type_display = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Display name of the report type"
+    )
+    model_type = models.CharField(
+        max_length=10,
+        help_text="PAA, GMM, or VFA"
+    )
+    assign_year = models.IntegerField(
+        help_text="Reporting year this report is submitted for"
+    )
+    assign_quarter = models.CharField(
+        max_length=10,
+        choices=QUARTER_CHOICES,
+        help_text="Reporting quarter this report is submitted for"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='active',
+        help_text="Status of the submitted report"
+    )
+    ifrs_engine_result_id = models.IntegerField(
+        help_text="Foreign key reference to IFRSEngineResult"
+    )
+    model_used = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Model name and version used"
+    )
+    batch_used = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Batch ID used"
+    )
+    line_of_business_used = models.TextField(
+        blank=True,
+        help_text="Comma-separated list of LOBs used"
+    )
+    conversion_engine_used = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Conversion engine type used"
+    )
+    ifrs_engine_used = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="IFRS engine type used"
+    )
+    submitted_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='submitted_reports'
+    )
+    
+    class Meta:
+        ordering = ['-assign_year', '-assign_quarter', '-created_on']
+        verbose_name = 'Submitted Report'
+        verbose_name_plural = 'Submitted Reports'
+        indexes = [
+            models.Index(fields=['assign_year', 'assign_quarter']),
+            models.Index(fields=['report_type', 'assign_year', 'assign_quarter']),
+            models.Index(fields=['status']),
+        ]
+    
+    def __str__(self):
+        return f"{self.report_type} - {self.assign_year} {self.assign_quarter} ({self.status})"
+    
+    def save(self, *args, **kwargs):
+        if self.status == 'active':
+            SubmittedReport.objects.filter(
+                report_type=self.report_type,
+                assign_year=self.assign_year,
+                assign_quarter=self.assign_quarter,
+                status='active'
+            ).exclude(pk=self.pk).update(status='superseded')
+        
+        super().save(*args, **kwargs)
+
+
 class IFRSEngineInput(models.Model):
     run_id = models.CharField(
         max_length=50,
