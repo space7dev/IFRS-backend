@@ -118,14 +118,30 @@ def populate_disclosure_report_audit_trail(
         if not value_id:
             continue
         
-        label = value_id.replace('_', ' ').replace('.', ' - ')
+        display_name = calc_data.get('display_name')
+        if not display_name:
+            display_name = value_id.replace('_', ' ').replace('.', ' - ')
         
         formula = calc_data.get('formula', None)
         dependencies = calc_data.get('dependencies', [])
-        method = calc_data.get('method', 'PAA')
+        
+        method = calc_data.get('method', metadata.get('method_name', 'PAA'))
+        if method and isinstance(method, str):
+            method = method.split()[0] if ' ' in method else method
+        
+        dimensions = calc_data.get('dimensions', {})
+        line_of_business = dimensions.get('LOB', None)
+        group_id = dimensions.get('Group', None)
+        cohort = dimensions.get('Cohort', None)
+        
         notes = calc_data.get('notes', None)
         
         flags = calc_data.get('flags', {})
+        
+        quality_flags = calc_data.get('quality_flags', ['OK'])
+        if quality_flags and len(quality_flags) > 0 and quality_flags[0] != 'OK':
+            quality_note = f"Quality: {', '.join(quality_flags)}"
+            notes = f"{notes}. {quality_note}" if notes else quality_note
         
         calc_value = create_calculation_value(
             value_id=value_id,
@@ -133,11 +149,14 @@ def populate_disclosure_report_audit_trail(
             report_type='disclosure_report',
             engine_result=engine_result,
             value=float(amount),
-            label=label,
+            label=display_name,
             period=period,
             legal_entity=legal_entity,
             currency=currency,
             calculation_method=method,
+            line_of_business=line_of_business,
+            cohort=cohort,
+            group_id=group_id,
             formula_human_readable=formula,
             dependencies=dependencies,
             notes=notes,
@@ -151,28 +170,40 @@ def populate_disclosure_report_audit_trail(
         assumptions = calc_data.get('assumptions', {})
         for assumption_type, assumption_data in assumptions.items():
             if isinstance(assumption_data, dict):
+                effective_date_str = assumption_data.get('effective_date', datetime.now().date().isoformat())
+                try:
+                    if isinstance(effective_date_str, str):
+                        effective_date = datetime.strptime(effective_date_str, '%Y-%m-%d').date()
+                    else:
+                        effective_date = effective_date_str
+                except Exception:
+                    effective_date = datetime.now().date()
+                
                 add_assumption_reference(
                     calc_value=calc_value,
                     assumption_type=assumption_type,
                     assumption_id=assumption_data.get('id', 'unknown'),
                     assumption_version=assumption_data.get('version', '1.0'),
-                    effective_date=datetime.now().date(),
+                    effective_date=effective_date,
                     metadata=assumption_data
                 )
         
         inputs = calc_data.get('inputs', {})
-        if inputs:
-            dataset_name = inputs.get('dataset', 'Unknown')
-            snapshot_id = inputs.get('snapshot_id', 'SNAP_DEFAULT')
-            record_count = inputs.get('record_count', 0)
-            
-            add_input_data_reference(
-                calc_value=calc_value,
-                dataset_name=dataset_name,
-                source_snapshot_id=snapshot_id,
-                record_count=record_count,
-                metadata=inputs
-            )
+        datasets = inputs.get('datasets', [])
+        
+        if not datasets and inputs and inputs.get('dataset'):
+            datasets = [inputs]
+        
+        for dataset_info in datasets:
+            if isinstance(dataset_info, dict):
+                add_input_data_reference(
+                    calc_value=calc_value,
+                    dataset_name=dataset_info.get('dataset', 'Unknown'),
+                    source_snapshot_id=dataset_info.get('snapshot_id', 'SNAP_DEFAULT'),
+                    record_count=dataset_info.get('record_count', 0),
+                    source_hash=dataset_info.get('source_hash', None),
+                    metadata=dataset_info
+                )
         
         count += 1
     

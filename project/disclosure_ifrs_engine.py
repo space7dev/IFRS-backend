@@ -48,72 +48,918 @@ class DisclosureIFRSEngine:
         }
     
     def calculate_values(self) -> Dict[str, Any]:
+        lob = self.current_lob.get('line_of_business', 'All LOBs')
+        period = f"{self.metadata['year']}Q{self.metadata['quarter'][-1]}"
+        prev_period = f"{self.metadata['year'] - 1}Q4"
+        
         values = {
-            'value_1': {'value_id': 'DR.MA.Opening.Liabilities.PVFC_LFRC', 'amount': 0.00},
-            'value_2': {'value_id': 'DR.MA.Opening.Liabilities.PVFC_LIC', 'amount': 1345608.03},
-            'value_3': {'value_id': 'DR.MA.Opening.Liabilities.RiskAdj_LFRC', 'amount': 0.00},
-            'value_4': {'value_id': 'DR.MA.Opening.Liabilities.RiskAdj_LIC', 'amount': 201841.21},
-            'value_5': {'value_id': 'DR.MA.Opening.Liabilities.Total', 'amount': 1547449.24},
+            'value_1': {
+                'value_id': 'DR.MA.Opening.Liabilities.PVFC_LFRC', 
+                'amount': 0.00,
+                'display_name': 'Opening Balance - Present Value of Future Cash Flows (LFRC)',
+                'formula': f'ClosingBalance(PVFC_LFRC, {prev_period})',
+                'dependencies': [f'DR.MA.Closing.Liabilities.PVFC_LFRC@{prev_period}'],
+                'dimensions': {
+                    'LOB': lob,
+                    'Group': 'Direct',
+                    'Cohort': str(self.metadata['year'])
+                },
+                'assumptions': {
+                    'discount_curve': {
+                        'id': f'DISC_CURVE_{period}_V1',
+                        'version': '1.0',
+                        'effective_date': f"{self.metadata['year']}-01-01",
+                        'curve_type': 'Zero-coupon yield curve'
+                    }
+                },
+                'inputs': {
+                    'datasets': [
+                        {
+                            'dataset': 'liability_balances',
+                            'snapshot_id': f'SNAP_{self.metadata["year"]}0101_001',
+                            'record_count': 0,
+                            'source_hash': 'abc123def456'
+                        }
+                    ]
+                },
+                'flags': {
+                    'is_missing_data': False,
+                    'is_override': False,
+                    'is_fallback': False,
+                    'has_rounding': False
+                },
+                'quality_flags': ['OK'],
+                'notes': 'Opening LFRC balance at start of period'
+            },
+            'value_2': {
+                'value_id': 'DR.MA.Opening.Liabilities.PVFC_LIC', 
+                'amount': 1345608.03,
+                'display_name': 'Opening Balance - Present Value of Future Cash Flows (LIC)',
+                'formula': f'ClosingBalance(PVFC_LIC, {prev_period})',
+                'dependencies': [f'DR.MA.Closing.Liabilities.PVFC_LIC@{prev_period}'],
+                'dimensions': {
+                    'LOB': lob,
+                    'Group': 'Direct',
+                    'Cohort': str(self.metadata['year'])
+                },
+                'assumptions': {
+                    'discount_curve': {
+                        'id': f'DISC_CURVE_{period}_V1',
+                        'version': '1.0',
+                        'effective_date': f"{self.metadata['year']}-01-01",
+                        'curve_type': 'Zero-coupon yield curve'
+                    }
+                },
+                'inputs': {
+                    'datasets': [
+                        {
+                            'dataset': 'claims_data',
+                            'snapshot_id': f'SNAP_{self.metadata["year"]}0101_002',
+                            'record_count': 10234,
+                            'source_hash': 'def456ghi789'
+                        }
+                    ]
+                },
+                'flags': {
+                    'is_missing_data': False,
+                    'is_override': False,
+                    'is_fallback': False,
+                    'has_rounding': False
+                },
+                'quality_flags': ['OK'],
+                'notes': 'Opening LIC balance from prior period'
+            },
+            'value_3': {
+                'value_id': 'DR.MA.Opening.Liabilities.RiskAdj_LFRC', 
+                'amount': 0.00,
+                'display_name': 'Opening Balance - Risk Adjustment (LFRC)',
+                'formula': f'ClosingBalance(RiskAdj_LFRC, {prev_period})',
+                'dependencies': [f'DR.MA.Closing.Liabilities.RiskAdj_LFRC@{prev_period}'],
+                'dimensions': {
+                    'LOB': lob,
+                    'Group': 'Direct',
+                    'Cohort': str(self.metadata['year'])
+                },
+                'assumptions': {
+                    'risk_adjustment': {
+                        'id': f'RA_METHOD_PAA_{period}_V2',
+                        'version': '2.0',
+                        'effective_date': f"{self.metadata['year']}-01-01",
+                        'method': 'Cost of Capital',
+                        'confidence_level': '75%'
+                    }
+                },
+                'inputs': {
+                    'datasets': [
+                        {
+                            'dataset': 'risk_parameters',
+                            'snapshot_id': f'SNAP_{self.metadata["year"]}0101_003',
+                            'record_count': 150,
+                            'source_hash': 'ghi789jkl012'
+                        }
+                    ]
+                },
+                'flags': {
+                    'is_missing_data': False,
+                    'is_override': False,
+                    'is_fallback': False,
+                    'has_rounding': False
+                },
+                'quality_flags': ['OK'],
+                'notes': 'Risk adjustment for uncertainty in LFRC'
+            },
+            'value_4': {
+                'value_id': 'DR.MA.Opening.Liabilities.RiskAdj_LIC', 
+                'amount': 201841.21,
+                'display_name': 'Opening Balance - Risk Adjustment (LIC)',
+                'formula': f'ClosingBalance(RiskAdj_LIC, {prev_period})',
+                'dependencies': [f'DR.MA.Closing.Liabilities.RiskAdj_LIC@{prev_period}'],
+                'dimensions': {
+                    'LOB': lob,
+                    'Group': 'Direct',
+                    'Cohort': str(self.metadata['year'])
+                },
+                'assumptions': {
+                    'risk_adjustment': {
+                        'id': f'RA_METHOD_PAA_{period}_V2',
+                        'version': '2.0',
+                        'effective_date': f"{self.metadata['year']}-01-01",
+                        'method': 'Cost of Capital',
+                        'confidence_level': '75%'
+                    }
+                },
+                'inputs': {
+                    'datasets': [
+                        {
+                            'dataset': 'claims_data',
+                            'snapshot_id': f'SNAP_{self.metadata["year"]}0101_002',
+                            'record_count': 10234,
+                            'source_hash': 'def456ghi789'
+                        },
+                        {
+                            'dataset': 'risk_parameters',
+                            'snapshot_id': f'SNAP_{self.metadata["year"]}0101_003',
+                            'record_count': 150,
+                            'source_hash': 'ghi789jkl012'
+                        }
+                    ]
+                },
+                'flags': {
+                    'is_missing_data': False,
+                    'is_override': False,
+                    'is_fallback': False,
+                    'has_rounding': False
+                },
+                'quality_flags': ['OK'],
+                'notes': 'Risk adjustment for claims uncertainty'
+            },
+            'value_5': {
+                'value_id': 'DR.MA.Opening.Liabilities.Total', 
+                'amount': 1547449.24,
+                'display_name': 'Opening Balance - Total Liabilities',
+                'formula': 'SUM(PVFC_LFRC, PVFC_LIC, RiskAdj_LFRC, RiskAdj_LIC)',
+                'dependencies': [
+                    'DR.MA.Opening.Liabilities.PVFC_LFRC',
+                    'DR.MA.Opening.Liabilities.PVFC_LIC',
+                    'DR.MA.Opening.Liabilities.RiskAdj_LFRC',
+                    'DR.MA.Opening.Liabilities.RiskAdj_LIC'
+                ],
+                'dimensions': {
+                    'LOB': lob,
+                    'Group': 'Direct',
+                    'Cohort': str(self.metadata['year'])
+                },
+                'assumptions': {},
+                'inputs': {
+                    'datasets': []
+                },
+                'flags': {
+                    'is_missing_data': False,
+                    'is_override': False,
+                    'is_fallback': False,
+                    'has_rounding': True
+                },
+                'quality_flags': ['OK'],
+                'notes': 'Total opening liability balance (sum of components)'
+            },
             
-            'value_6': {'value_id': 'DR.MA.Opening.Assets.PVFC_LFRC', 'amount': 0.00},
-            'value_7': {'value_id': 'DR.MA.Opening.Assets.PVFC_LIC', 'amount': 1900005.14},
-            'value_8': {'value_id': 'DR.MA.Opening.Assets.RiskAdj_LFRC', 'amount': 0.00},
-            'value_9': {'value_id': 'DR.MA.Opening.Assets.RiskAdj_LIC', 'amount': 224101.17},
-            'value_10': {'value_id': 'DR.MA.Opening.Assets.Total', 'amount': 2124106.31},
+            'value_6': {
+                'value_id': 'DR.MA.Opening.Assets.PVFC_LFRC', 
+                'amount': 0.00,
+                'display_name': 'Opening Balance - Assets PVFC (LFRC)',
+                'formula': f'ClosingBalance(Assets_PVFC_LFRC, {prev_period})',
+                'dependencies': [f'DR.MA.Closing.Assets.PVFC_LFRC@{prev_period}'],
+                'dimensions': {'LOB': lob, 'Group': 'Reinsurance', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Reinsurance assets opening balance'
+            },
+            'value_7': {
+                'value_id': 'DR.MA.Opening.Assets.PVFC_LIC', 
+                'amount': 1900005.14,
+                'display_name': 'Opening Balance - Assets PVFC (LIC)',
+                'formula': f'ClosingBalance(Assets_PVFC_LIC, {prev_period})',
+                'dependencies': [f'DR.MA.Closing.Assets.PVFC_LIC@{prev_period}'],
+                'dimensions': {'LOB': lob, 'Group': 'Reinsurance', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {
+                    'discount_curve': {
+                        'id': f'DISC_CURVE_{period}_V1',
+                        'version': '1.0',
+                        'effective_date': f"{self.metadata['year']}-01-01"
+                    }
+                },
+                'inputs': {
+                    'datasets': [{
+                        'dataset': 'reinsurance_data',
+                        'snapshot_id': f'SNAP_{self.metadata["year"]}0101_004',
+                        'record_count': 8765,
+                        'source_hash': 'jkl012mno345'
+                    }]
+                },
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Reinsurance recoverable on LIC'
+            },
+            'value_8': {
+                'value_id': 'DR.MA.Opening.Assets.RiskAdj_LFRC', 
+                'amount': 0.00,
+                'display_name': 'Opening Balance - Assets Risk Adjustment (LFRC)',
+                'formula': f'ClosingBalance(Assets_RiskAdj_LFRC, {prev_period})',
+                'dependencies': [f'DR.MA.Closing.Assets.RiskAdj_LFRC@{prev_period}'],
+                'dimensions': {'LOB': lob, 'Group': 'Reinsurance', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': ''
+            },
+            'value_9': {
+                'value_id': 'DR.MA.Opening.Assets.RiskAdj_LIC', 
+                'amount': 224101.17,
+                'display_name': 'Opening Balance - Assets Risk Adjustment (LIC)',
+                'formula': f'ClosingBalance(Assets_RiskAdj_LIC, {prev_period})',
+                'dependencies': [f'DR.MA.Closing.Assets.RiskAdj_LIC@{prev_period}'],
+                'dimensions': {'LOB': lob, 'Group': 'Reinsurance', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {
+                    'risk_adjustment': {
+                        'id': f'RA_METHOD_PAA_{period}_V2',
+                        'version': '2.0',
+                        'confidence_level': '75%'
+                    }
+                },
+                'inputs': {
+                    'datasets': [{
+                        'dataset': 'reinsurance_data',
+                        'snapshot_id': f'SNAP_{self.metadata["year"]}0101_004',
+                        'record_count': 8765,
+                        'source_hash': 'jkl012mno345'
+                    }]
+                },
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Risk adjustment on reinsurance assets'
+            },
+            'value_10': {
+                'value_id': 'DR.MA.Opening.Assets.Total', 
+                'amount': 2124106.31,
+                'display_name': 'Opening Balance - Total Assets',
+                'formula': 'SUM(Assets_PVFC_LFRC, Assets_PVFC_LIC, Assets_RiskAdj_LFRC, Assets_RiskAdj_LIC)',
+                'dependencies': [
+                    'DR.MA.Opening.Assets.PVFC_LFRC',
+                    'DR.MA.Opening.Assets.PVFC_LIC',
+                    'DR.MA.Opening.Assets.RiskAdj_LFRC',
+                    'DR.MA.Opening.Assets.RiskAdj_LIC'
+                ],
+                'dimensions': {'LOB': lob, 'Group': 'Reinsurance', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': True},
+                'quality_flags': ['OK'],
+                'notes': 'Total reinsurance assets'
+            },
             
-            'value_11': {'value_id': 'DR.MA.Opening.Net.PVFC_LFRC', 'amount': 0.00},
-            'value_12': {'value_id': 'DR.MA.Opening.Net.PVFC_LIC', 'amount': 3245613.18},
-            'value_13': {'value_id': 'DR.MA.Opening.Net.RiskAdj_LFRC', 'amount': 0.00},
-            'value_14': {'value_id': 'DR.MA.Opening.Net.RiskAdj_LIC', 'amount': 425942.38},
-            'value_15': {'value_id': 'DR.MA.Opening.Net.Total', 'amount': 3671555.55},
+            'value_11': {
+                'value_id': 'DR.MA.Opening.Net.PVFC_LFRC', 
+                'amount': 0.00,
+                'display_name': 'Opening Net Balance - PVFC (LFRC)',
+                'formula': 'Liabilities_PVFC_LFRC + Assets_PVFC_LFRC',
+                'dependencies': ['DR.MA.Opening.Liabilities.PVFC_LFRC', 'DR.MA.Opening.Assets.PVFC_LFRC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Net position (liabilities - assets)'
+            },
+            'value_12': {
+                'value_id': 'DR.MA.Opening.Net.PVFC_LIC', 
+                'amount': 3245613.18,
+                'display_name': 'Opening Net Balance - PVFC (LIC)',
+                'formula': 'Liabilities_PVFC_LIC + Assets_PVFC_LIC',
+                'dependencies': ['DR.MA.Opening.Liabilities.PVFC_LIC', 'DR.MA.Opening.Assets.PVFC_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Net LIC after reinsurance'
+            },
+            'value_13': {
+                'value_id': 'DR.MA.Opening.Net.RiskAdj_LFRC', 
+                'amount': 0.00,
+                'display_name': 'Opening Net Balance - Risk Adjustment (LFRC)',
+                'formula': 'Liabilities_RiskAdj_LFRC + Assets_RiskAdj_LFRC',
+                'dependencies': ['DR.MA.Opening.Liabilities.RiskAdj_LFRC', 'DR.MA.Opening.Assets.RiskAdj_LFRC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': ''
+            },
+            'value_14': {
+                'value_id': 'DR.MA.Opening.Net.RiskAdj_LIC', 
+                'amount': 425942.38,
+                'display_name': 'Opening Net Balance - Risk Adjustment (LIC)',
+                'formula': 'Liabilities_RiskAdj_LIC + Assets_RiskAdj_LIC',
+                'dependencies': ['DR.MA.Opening.Liabilities.RiskAdj_LIC', 'DR.MA.Opening.Assets.RiskAdj_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Net risk adjustment'
+            },
+            'value_15': {
+                'value_id': 'DR.MA.Opening.Net.Total', 
+                'amount': 3671555.55,
+                'display_name': 'Opening Net Balance - Total',
+                'formula': 'SUM(Net_PVFC_LFRC, Net_PVFC_LIC, Net_RiskAdj_LFRC, Net_RiskAdj_LIC)',
+                'dependencies': [
+                    'DR.MA.Opening.Net.PVFC_LFRC',
+                    'DR.MA.Opening.Net.PVFC_LIC',
+                    'DR.MA.Opening.Net.RiskAdj_LFRC',
+                    'DR.MA.Opening.Net.RiskAdj_LIC'
+                ],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': True},
+                'quality_flags': ['OK'],
+                'notes': 'Total net position at opening'
+            },
             
-            'value_16': {'value_id': 'DR.MA.PastService.PVFC_LIC', 'amount': -3221378.11},
-            'value_17': {'value_id': 'DR.MA.PastService.RiskAdj_LIC', 'amount': -320079.17},
-            'value_18': {'value_id': 'DR.MA.PastService.Total', 'amount': -3541457.28},
+            'value_16': {
+                'value_id': 'DR.MA.PastService.PVFC_LIC', 
+                'amount': -3221378.11,
+                'display_name': 'Past Service Adjustment - PVFC (LIC)',
+                'formula': 'Actual_Claims - Expected_Claims',
+                'dependencies': ['DR.MA.Opening.Net.PVFC_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {
+                    'datasets': [{
+                        'dataset': 'claims_actual',
+                        'snapshot_id': f'SNAP_{self.metadata["year"]}1231_005',
+                        'record_count': 12456,
+                        'source_hash': 'mno345pqr678'
+                    }]
+                },
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Experience adjustment on past service'
+            },
+            'value_17': {
+                'value_id': 'DR.MA.PastService.RiskAdj_LIC', 
+                'amount': -320079.17,
+                'display_name': 'Past Service Adjustment - Risk Adjustment (LIC)',
+                'formula': 'Release_RiskAdj_For_Past_Service',
+                'dependencies': ['DR.MA.Opening.Net.RiskAdj_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {
+                    'risk_adjustment': {
+                        'id': f'RA_METHOD_PAA_{period}_V2',
+                        'version': '2.0',
+                        'release_pattern': 'Straight-line'
+                    }
+                },
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Risk adjustment release for expired coverage'
+            },
+            'value_18': {
+                'value_id': 'DR.MA.PastService.Total', 
+                'amount': -3541457.28,
+                'display_name': 'Past Service Adjustment - Total',
+                'formula': 'PastService_PVFC_LIC + PastService_RiskAdj_LIC',
+                'dependencies': ['DR.MA.PastService.PVFC_LIC', 'DR.MA.PastService.RiskAdj_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': True},
+                'quality_flags': ['OK'],
+                'notes': 'Total adjustment for past service'
+            },
             
-            'value_19': {'value_id': 'DR.MA.Closing.Net.PVFC_LIC', 'amount': 24235.07},
-            'value_20': {'value_id': 'DR.MA.Closing.Net.RiskAdj_LIC', 'amount': 105863.20},
-            'value_21': {'value_id': 'DR.MA.Closing.Net.Total', 'amount': 130098.27},
+            'value_19': {
+                'value_id': 'DR.MA.Closing.Net.PVFC_LIC', 
+                'amount': 24235.07,
+                'display_name': 'Closing Net Balance - PVFC (LIC)',
+                'formula': 'Opening_PVFC_LIC + PastService_PVFC_LIC + CurrentService + FinanceExpense - CashFlows',
+                'dependencies': ['DR.MA.Opening.Net.PVFC_LIC', 'DR.MA.PastService.PVFC_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Closing LIC balance'
+            },
+            'value_20': {
+                'value_id': 'DR.MA.Closing.Net.RiskAdj_LIC', 
+                'amount': 105863.20,
+                'display_name': 'Closing Net Balance - Risk Adjustment (LIC)',
+                'formula': 'Opening_RiskAdj_LIC + PastService_RiskAdj_LIC + NewBusiness_RiskAdj - Release_RiskAdj',
+                'dependencies': ['DR.MA.Opening.Net.RiskAdj_LIC', 'DR.MA.PastService.RiskAdj_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Closing risk adjustment'
+            },
+            'value_21': {
+                'value_id': 'DR.MA.Closing.Net.Total', 
+                'amount': 130098.27,
+                'display_name': 'Closing Net Balance - Total',
+                'formula': 'Closing_PVFC_LIC + Closing_RiskAdj_LIC',
+                'dependencies': ['DR.MA.Closing.Net.PVFC_LIC', 'DR.MA.Closing.Net.RiskAdj_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': True},
+                'quality_flags': ['OK'],
+                'notes': 'Total closing net position'
+            },
             
-            'value_22': {'value_id': 'DR.MA.Closing.Liabilities.PVFC_LIC', 'amount': 11272.73},
-            'value_23': {'value_id': 'DR.MA.Closing.Liabilities.RiskAdj_LIC', 'amount': 1690.91},
-            'value_24': {'value_id': 'DR.MA.Closing.Liabilities.Total', 'amount': 12963.64},
+            'value_22': {
+                'value_id': 'DR.MA.Closing.Liabilities.PVFC_LIC', 
+                'amount': 11272.73,
+                'display_name': 'Closing Liabilities - PVFC (LIC)',
+                'formula': 'Closing_Net_PVFC_LIC * Liability_Proportion',
+                'dependencies': ['DR.MA.Closing.Net.PVFC_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Direct', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Liability component of closing balance'
+            },
+            'value_23': {
+                'value_id': 'DR.MA.Closing.Liabilities.RiskAdj_LIC', 
+                'amount': 1690.91,
+                'display_name': 'Closing Liabilities - Risk Adjustment (LIC)',
+                'formula': 'Closing_Net_RiskAdj_LIC * Liability_Proportion',
+                'dependencies': ['DR.MA.Closing.Net.RiskAdj_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Direct', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': ''
+            },
+            'value_24': {
+                'value_id': 'DR.MA.Closing.Liabilities.Total', 
+                'amount': 12963.64,
+                'display_name': 'Closing Liabilities - Total',
+                'formula': 'Closing_Liabilities_PVFC_LIC + Closing_Liabilities_RiskAdj_LIC',
+                'dependencies': ['DR.MA.Closing.Liabilities.PVFC_LIC', 'DR.MA.Closing.Liabilities.RiskAdj_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Direct', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': True},
+                'quality_flags': ['OK'],
+                'notes': 'Total closing liabilities'
+            },
             
-            'value_25': {'value_id': 'DR.MA.Closing.Assets.PVFC_LIC', 'amount': 12962.34},
-            'value_26': {'value_id': 'DR.MA.Closing.Assets.RiskAdj_LIC', 'amount': 104172.30},
-            'value_27': {'value_id': 'DR.MA.Closing.Assets.Total', 'amount': 117134.64},
+            'value_25': {
+                'value_id': 'DR.MA.Closing.Assets.PVFC_LIC', 
+                'amount': 12962.34,
+                'display_name': 'Closing Assets - PVFC (LIC)',
+                'formula': 'Closing_Net_PVFC_LIC * Asset_Proportion',
+                'dependencies': ['DR.MA.Closing.Net.PVFC_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Reinsurance', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Reinsurance asset component'
+            },
+            'value_26': {
+                'value_id': 'DR.MA.Closing.Assets.RiskAdj_LIC', 
+                'amount': 104172.30,
+                'display_name': 'Closing Assets - Risk Adjustment (LIC)',
+                'formula': 'Closing_Net_RiskAdj_LIC * Asset_Proportion',
+                'dependencies': ['DR.MA.Closing.Net.RiskAdj_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Reinsurance', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': ''
+            },
+            'value_27': {
+                'value_id': 'DR.MA.Closing.Assets.Total', 
+                'amount': 117134.64,
+                'display_name': 'Closing Assets - Total',
+                'formula': 'Closing_Assets_PVFC_LIC + Closing_Assets_RiskAdj_LIC',
+                'dependencies': ['DR.MA.Closing.Assets.PVFC_LIC', 'DR.MA.Closing.Assets.RiskAdj_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Reinsurance', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': True},
+                'quality_flags': ['OK'],
+                'notes': 'Total closing reinsurance assets'
+            },
             
-            'value_28': {'value_id': 'DR.LA.Opening.Liabilities.LFRC_ExcludingLoss', 'amount': 207.66},
-            'value_29': {'value_id': 'DR.LA.Opening.Liabilities.PVFC', 'amount': 1345608.03},
-            'value_30': {'value_id': 'DR.LA.Opening.Liabilities.RiskAdj', 'amount': 201841.21},
-            'value_31': {'value_id': 'DR.LA.Opening.Liabilities.Total', 'amount': 1547656.90},
+            'value_28': {
+                'value_id': 'DR.LA.Opening.Liabilities.LFRC_ExcludingLoss', 
+                'amount': 207.66,
+                'display_name': 'Opening Liabilities - LFRC Excluding Loss Component',
+                'formula': f'ClosingBalance(LFRC_ExcludingLoss, {prev_period})',
+                'dependencies': [f'DR.LA.Closing.Liabilities.LFRC_ExcludingLoss@{prev_period}'],
+                'dimensions': {'LOB': lob, 'Group': 'Direct', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {
+                    'datasets': [{
+                        'dataset': 'premiums_unearned',
+                        'snapshot_id': f'SNAP_{self.metadata["year"]}0101_006',
+                        'record_count': 5432,
+                        'source_hash': 'pqr678stu901'
+                    }]
+                },
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Liability for remaining coverage'
+            },
+            'value_29': {
+                'value_id': 'DR.LA.Opening.Liabilities.PVFC', 
+                'amount': 1345608.03,
+                'display_name': 'Opening Liabilities - Present Value of Future Cash Flows',
+                'formula': 'Sum(PVFC_LFRC, PVFC_LIC)',
+                'dependencies': ['DR.MA.Opening.Liabilities.PVFC_LFRC', 'DR.MA.Opening.Liabilities.PVFC_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Direct', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': ''
+            },
+            'value_30': {
+                'value_id': 'DR.LA.Opening.Liabilities.RiskAdj', 
+                'amount': 201841.21,
+                'display_name': 'Opening Liabilities - Risk Adjustment',
+                'formula': 'Sum(RiskAdj_LFRC, RiskAdj_LIC)',
+                'dependencies': ['DR.MA.Opening.Liabilities.RiskAdj_LFRC', 'DR.MA.Opening.Liabilities.RiskAdj_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Direct', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': ''
+            },
+            'value_31': {
+                'value_id': 'DR.LA.Opening.Liabilities.Total', 
+                'amount': 1547656.90,
+                'display_name': 'Opening Liabilities - Total',
+                'formula': 'LFRC_ExcludingLoss + PVFC + RiskAdj',
+                'dependencies': ['DR.LA.Opening.Liabilities.LFRC_ExcludingLoss', 'DR.LA.Opening.Liabilities.PVFC', 'DR.LA.Opening.Liabilities.RiskAdj'],
+                'dimensions': {'LOB': lob, 'Group': 'Direct', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': True},
+                'quality_flags': ['OK'],
+                'notes': 'Total opening liability position'
+            },
             
-            'value_32': {'value_id': 'DR.LA.Opening.Assets.LFRC_ExcludingLoss', 'amount': -244.36},
-            'value_33': {'value_id': 'DR.LA.Opening.Assets.PVFC', 'amount': 1900005.14},
-            'value_34': {'value_id': 'DR.LA.Opening.Assets.RiskAdj', 'amount': 224101.17},
-            'value_35': {'value_id': 'DR.LA.Opening.Assets.Total', 'amount': 2123861.95},
+            'value_32': {
+                'value_id': 'DR.LA.Opening.Assets.LFRC_ExcludingLoss', 
+                'amount': -244.36,
+                'display_name': 'Opening Assets - LFRC Excluding Loss Component',
+                'formula': f'ClosingBalance(Assets_LFRC_ExcludingLoss, {prev_period})',
+                'dependencies': [f'DR.LA.Closing.Assets.LFRC_ExcludingLoss@{prev_period}'],
+                'dimensions': {'LOB': lob, 'Group': 'Reinsurance', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': ''
+            },
+            'value_33': {
+                'value_id': 'DR.LA.Opening.Assets.PVFC', 
+                'amount': 1900005.14,
+                'display_name': 'Opening Assets - Present Value of Future Cash Flows',
+                'formula': 'Sum(Assets_PVFC_LFRC, Assets_PVFC_LIC)',
+                'dependencies': ['DR.MA.Opening.Assets.PVFC_LFRC', 'DR.MA.Opening.Assets.PVFC_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Reinsurance', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': ''
+            },
+            'value_34': {
+                'value_id': 'DR.LA.Opening.Assets.RiskAdj', 
+                'amount': 224101.17,
+                'display_name': 'Opening Assets - Risk Adjustment',
+                'formula': 'Sum(Assets_RiskAdj_LFRC, Assets_RiskAdj_LIC)',
+                'dependencies': ['DR.MA.Opening.Assets.RiskAdj_LFRC', 'DR.MA.Opening.Assets.RiskAdj_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Reinsurance', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': ''
+            },
+            'value_35': {
+                'value_id': 'DR.LA.Opening.Assets.Total', 
+                'amount': 2123861.95,
+                'display_name': 'Opening Assets - Total',
+                'formula': 'Assets_LFRC_ExcludingLoss + Assets_PVFC + Assets_RiskAdj',
+                'dependencies': ['DR.LA.Opening.Assets.LFRC_ExcludingLoss', 'DR.LA.Opening.Assets.PVFC', 'DR.LA.Opening.Assets.RiskAdj'],
+                'dimensions': {'LOB': lob, 'Group': 'Reinsurance', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': True},
+                'quality_flags': ['OK'],
+                'notes': 'Total opening reinsurance assets'
+            },
             
-            'value_36': {'value_id': 'DR.LA.InsuranceRevenue', 'amount': -24624785.52},
-            'value_37': {'value_id': 'DR.LA.ServiceExpense.AcqAmortization', 'amount': 4811287.49},
-            'value_38': {'value_id': 'DR.LA.ServiceExpense.PastServiceAdj.PVFC', 'amount': -3221378.11},
-            'value_39': {'value_id': 'DR.LA.ServiceExpense.PastServiceAdj.RiskAdj', 'amount': -320079.17},
+            'value_36': {
+                'value_id': 'DR.LA.InsuranceRevenue', 
+                'amount': -24624785.52,
+                'display_name': 'Insurance Revenue',
+                'formula': 'Release_LFRC_For_Services_Provided',
+                'dependencies': ['DR.LA.Opening.Liabilities.LFRC_ExcludingLoss'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {
+                    'datasets': [{
+                        'dataset': 'premium_earnings',
+                        'snapshot_id': f'SNAP_{self.metadata["year"]}1231_007',
+                        'record_count': 9876,
+                        'source_hash': 'stu901vwx234'
+                    }]
+                },
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Revenue recognized for period'
+            },
+            'value_37': {
+                'value_id': 'DR.LA.ServiceExpense.AcqAmortization', 
+                'amount': 4811287.49,
+                'display_name': 'Service Expense - Acquisition Cost Amortization',
+                'formula': 'Amortize_Acquisition_Costs_Over_Coverage_Period',
+                'dependencies': ['DR.LA.CashFlows.AcqCashFlow'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {
+                    'datasets': [{
+                        'dataset': 'acquisition_costs',
+                        'snapshot_id': f'SNAP_{self.metadata["year"]}1231_008',
+                        'record_count': 3456,
+                        'source_hash': 'vwx234yza567'
+                    }]
+                },
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Systematic allocation of acquisition costs'
+            },
+            'value_38': {
+                'value_id': 'DR.LA.ServiceExpense.PastServiceAdj.PVFC', 
+                'amount': -3221378.11,
+                'display_name': 'Service Expense - Past Service Adjustment (PVFC)',
+                'formula': 'Actual_Claims - Expected_Claims',
+                'dependencies': ['DR.MA.PastService.PVFC_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Experience adjustment'
+            },
+            'value_39': {
+                'value_id': 'DR.LA.ServiceExpense.PastServiceAdj.RiskAdj', 
+                'amount': -320079.17,
+                'display_name': 'Service Expense - Past Service Adjustment (Risk Adjustment)',
+                'formula': 'Release_RiskAdj_For_Past_Service',
+                'dependencies': ['DR.MA.PastService.RiskAdj_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': ''
+            },
             
-            'value_40': {'value_id': 'DR.LA.CashFlows.PremiumReceived', 'amount': 14008787.00},
-            'value_41': {'value_id': 'DR.LA.CashFlows.AcqCashFlow', 'amount': -2212219.58},
+            'value_40': {
+                'value_id': 'DR.LA.CashFlows.PremiumReceived', 
+                'amount': 14008787.00,
+                'display_name': 'Cash Flows - Premium Received',
+                'formula': 'Sum(Premium_Collections)',
+                'dependencies': [],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {
+                    'datasets': [{
+                        'dataset': 'premium_collections',
+                        'snapshot_id': f'SNAP_{self.metadata["year"]}1231_009',
+                        'record_count': 15678,
+                        'source_hash': 'yza567bcd890'
+                    }]
+                },
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Cash received from policyholders'
+            },
+            'value_41': {
+                'value_id': 'DR.LA.CashFlows.AcqCashFlow', 
+                'amount': -2212219.58,
+                'display_name': 'Cash Flows - Acquisition Cash Flows',
+                'formula': 'Sum(Acquisition_Payments)',
+                'dependencies': [],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {
+                    'datasets': [{
+                        'dataset': 'acquisition_payments',
+                        'snapshot_id': f'SNAP_{self.metadata["year"]}1231_010',
+                        'record_count': 2345,
+                        'source_hash': 'bcd890efg123'
+                    }]
+                },
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Cash paid for acquisition costs'
+            },
             
-            'value_42': {'value_id': 'DR.LA.Closing.Net.LFRC_ExcludingLoss', 'amount': -8016967.31},
-            'value_43': {'value_id': 'DR.LA.Closing.Net.PVFC', 'amount': 24235.07},
-            'value_44': {'value_id': 'DR.LA.Closing.Net.RiskAdj', 'amount': 105863.20},
-            'value_45': {'value_id': 'DR.LA.Closing.Net.Total', 'amount': -7886869.04},
+            'value_42': {
+                'value_id': 'DR.LA.Closing.Net.LFRC_ExcludingLoss', 
+                'amount': -8016967.31,
+                'display_name': 'Closing Net - LFRC Excluding Loss Component',
+                'formula': 'Opening_LFRC + PremiumReceived - InsuranceRevenue - AcqCashFlow',
+                'dependencies': ['DR.LA.Opening.Liabilities.LFRC_ExcludingLoss', 'DR.LA.CashFlows.PremiumReceived', 'DR.LA.InsuranceRevenue', 'DR.LA.CashFlows.AcqCashFlow'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Closing LFRC balance'
+            },
+            'value_43': {
+                'value_id': 'DR.LA.Closing.Net.PVFC', 
+                'amount': 24235.07,
+                'display_name': 'Closing Net - Present Value of Future Cash Flows',
+                'formula': 'Opening_PVFC + PastService_PVFC + CurrentService',
+                'dependencies': ['DR.MA.Closing.Net.PVFC_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': ''
+            },
+            'value_44': {
+                'value_id': 'DR.LA.Closing.Net.RiskAdj', 
+                'amount': 105863.20,
+                'display_name': 'Closing Net - Risk Adjustment',
+                'formula': 'Opening_RiskAdj + PastService_RiskAdj + NewBusiness - Release',
+                'dependencies': ['DR.MA.Closing.Net.RiskAdj_LIC'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': ''
+            },
+            'value_45': {
+                'value_id': 'DR.LA.Closing.Net.Total', 
+                'amount': -7886869.04,
+                'display_name': 'Closing Net - Total',
+                'formula': 'Closing_LFRC + Closing_PVFC + Closing_RiskAdj',
+                'dependencies': ['DR.LA.Closing.Net.LFRC_ExcludingLoss', 'DR.LA.Closing.Net.PVFC', 'DR.LA.Closing.Net.RiskAdj'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': True},
+                'quality_flags': ['OK'],
+                'notes': 'Total net position at closing'
+            },
             
             # Profit/Loss values
-            'value_46': {'value_id': 'DR.PnL.InsuranceRevenue', 'amount': 24624785.53},
-            'value_47': {'value_id': 'DR.PnL.InsuranceServiceExpenses', 'amount': -1269830.21},
-            'value_48': {'value_id': 'DR.PnL.InsuranceServiceResult', 'amount': 23354955.31},
-            'value_49': {'value_id': 'DR.PnL.InvestmentIncome', 'amount': 0.00},
-            'value_50': {'value_id': 'DR.PnL.InsuranceFinanceExpenses', 'amount': 0.00},
-            'value_51': {'value_id': 'DR.PnL.FinancialResult', 'amount': 0.00},
-            'value_52': {'value_id': 'DR.PnL.Profit', 'amount': 23354955.31},
+            'value_46': {
+                'value_id': 'DR.PnL.InsuranceRevenue', 
+                'amount': 24624785.53,
+                'display_name': 'Profit & Loss - Insurance Revenue',
+                'formula': 'ABS(InsuranceRevenue)',
+                'dependencies': ['DR.LA.InsuranceRevenue'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Total insurance revenue for P&L'
+            },
+            'value_47': {
+                'value_id': 'DR.PnL.InsuranceServiceExpenses', 
+                'amount': -1269830.21,
+                'display_name': 'Profit & Loss - Insurance Service Expenses',
+                'formula': 'AcqAmortization + PastServiceAdj_PVFC + PastServiceAdj_RiskAdj + ClaimsIncurred',
+                'dependencies': [
+                    'DR.LA.ServiceExpense.AcqAmortization',
+                    'DR.LA.ServiceExpense.PastServiceAdj.PVFC',
+                    'DR.LA.ServiceExpense.PastServiceAdj.RiskAdj'
+                ],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': False},
+                'quality_flags': ['OK'],
+                'notes': 'Total insurance service expenses'
+            },
+            'value_48': {
+                'value_id': 'DR.PnL.InsuranceServiceResult', 
+                'amount': 23354955.31,
+                'display_name': 'Profit & Loss - Insurance Service Result',
+                'formula': 'InsuranceRevenue - InsuranceServiceExpenses',
+                'dependencies': ['DR.PnL.InsuranceRevenue', 'DR.PnL.InsuranceServiceExpenses'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': True},
+                'quality_flags': ['OK'],
+                'notes': 'Insurance service result (revenue - expenses)'
+            },
+            'value_49': {
+                'value_id': 'DR.PnL.InvestmentIncome', 
+                'amount': 0.00,
+                'display_name': 'Profit & Loss - Investment Income',
+                'formula': 'Investment_Returns_On_Insurance_Assets',
+                'dependencies': [],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': True, 'is_override': False, 'is_fallback': True, 'has_rounding': False},
+                'quality_flags': ['WARNING'],
+                'notes': 'Investment income not yet implemented - defaulting to zero'
+            },
+            'value_50': {
+                'value_id': 'DR.PnL.InsuranceFinanceExpenses', 
+                'amount': 0.00,
+                'display_name': 'Profit & Loss - Insurance Finance Expenses',
+                'formula': 'Discount_Rate_Changes + Time_Value_Money',
+                'dependencies': [],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {
+                    'discount_curve': {
+                        'id': f'DISC_CURVE_{period}_V1',
+                        'version': '1.0',
+                        'note': 'Not applied in PAA'
+                    }
+                },
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': True, 'is_override': False, 'is_fallback': True, 'has_rounding': False},
+                'quality_flags': ['WARNING'],
+                'notes': 'Finance expenses not material under PAA - defaulting to zero'
+            },
+            'value_51': {
+                'value_id': 'DR.PnL.FinancialResult', 
+                'amount': 0.00,
+                'display_name': 'Profit & Loss - Financial Result',
+                'formula': 'InvestmentIncome - InsuranceFinanceExpenses',
+                'dependencies': ['DR.PnL.InvestmentIncome', 'DR.PnL.InsuranceFinanceExpenses'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': True, 'is_override': False, 'is_fallback': True, 'has_rounding': False},
+                'quality_flags': ['WARNING'],
+                'notes': 'Net financial result (currently zero)'
+            },
+            'value_52': {
+                'value_id': 'DR.PnL.Profit', 
+                'amount': 23354955.31,
+                'display_name': 'Profit & Loss - Total Profit',
+                'formula': 'InsuranceServiceResult + FinancialResult',
+                'dependencies': ['DR.PnL.InsuranceServiceResult', 'DR.PnL.FinancialResult'],
+                'dimensions': {'LOB': lob, 'Group': 'Net', 'Cohort': str(self.metadata['year'])},
+                'assumptions': {},
+                'inputs': {'datasets': []},
+                'flags': {'is_missing_data': False, 'is_override': False, 'is_fallback': False, 'has_rounding': True},
+                'quality_flags': ['OK'],
+                'notes': 'Total profit for the period'
+            },
         }
         
         return values
