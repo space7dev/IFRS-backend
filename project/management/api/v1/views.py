@@ -1,39 +1,9 @@
-import django_filters.rest_framework as drf_filters
-from rest_framework import filters, generics, permissions, status, viewsets
+from rest_framework import generics, permissions
 
-from gpt_integration.api.v1.serializers import ChatSerializer
-from gpt_integration.models import Chat, SystemPrompt
-from management.models import get_site_config
+from management.models import SiteConfiguration, get_site_config
 from users.api.v1.permissions import IsAuthenticatedSuperuser
 
-from .filters import ChatFilter
-from .serializers import SiteConfigurationSerializer, SystemPromptSerializer
-
-
-class SystemPromptAdminViewSet(viewsets.ModelViewSet):
-    """
-    A Admin only ViewSet for viewing and editing system prompts.
-    """
-    queryset = SystemPrompt.objects.all()
-    serializer_class = SystemPromptSerializer
-    permission_classes = [IsAuthenticatedSuperuser]
-
-
-class ChatAdminViewSet(viewsets.ModelViewSet):
-    """
-    A Admin only ViewSet for viewing and editing chats.
-    """
-    queryset = Chat.objects.all()
-    serializer_class = ChatSerializer
-    permission_classes = [IsAuthenticatedSuperuser]
-    filter_backends = (drf_filters.DjangoFilterBackend, filters.SearchFilter)
-    filterset_class = ChatFilter
-    search_fields = [
-        "owner__email",
-        "owner__first_name",
-        "owner__last_name",
-        "owner__username"
-    ]
+from .serializers import SiteConfigurationSerializer
 
 
 class SiteConfigurationBaseAPIView(generics.GenericAPIView):

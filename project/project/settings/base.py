@@ -41,8 +41,6 @@ INSTALLED_APPS = [
     'django_filters',
     
     'management',
-    'gpt_integration',
-    'widgets',
     'model_definitions',
 ]
 

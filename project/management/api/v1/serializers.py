@@ -1,14 +1,6 @@
 from management.models import SiteConfiguration
 from rest_framework import serializers
 
-from gpt_integration.models import SystemPrompt
-
-
-class SystemPromptSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SystemPrompt
-        fields = ['id', 'prompt', 'is_active']
-
 
 class SiteConfigurationSerializer(serializers.ModelSerializer):
     class Meta:

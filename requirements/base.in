@@ -22,8 +22,6 @@ pillow
 pyjwt[crypto]==1.7.0
 wheel
 
-tiktoken
-openai
 
 fpdf2
 pandas==2.0.3
