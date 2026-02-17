@@ -2910,6 +2910,19 @@ class AuditViewSet(viewsets.ReadOnlyModelViewSet):
                 'detail': f'Error: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
+    def _get_openai_client(self):
+        api_key = settings.OPENAI_API_KEY
+        try:
+            return OpenAI(api_key=api_key)
+        except TypeError as e:
+            if "proxies" in str(e):
+                try:
+                    import httpx
+                    return OpenAI(api_key=api_key, http_client=httpx.Client())
+                except Exception:
+                    raise e
+            raise
+
     def _generate_ai_insight(self, comparison_data):
         if OPENAI_AVAILABLE and settings.OPENAI_API_KEY:
             try:
@@ -2921,7 +2934,7 @@ class AuditViewSet(viewsets.ReadOnlyModelViewSet):
             return self._generate_fallback_insight(comparison_data)
     
     def _generate_ai_insight_with_openai(self, comparison_data):
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        client = self._get_openai_client()
         
         absolute_change = comparison_data['absolute_change']
         percentage_change = comparison_data['percentage_change']

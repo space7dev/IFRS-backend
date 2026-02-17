@@ -23,6 +23,7 @@ pyjwt[crypto]==1.7.0
 wheel
 
 openai
+httpx==0.27.2
 fpdf2
 pandas==2.0.3
 numpy==1.24.3
