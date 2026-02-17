@@ -10,10 +10,19 @@ from rest_framework.pagination import PageNumberPagination
 from django.utils import timezone
 from django.db import transaction
 from django.http import HttpResponse, Http404
+from django.conf import settings
 
 import logging
+import json
 
 logger = logging.getLogger(__name__)
+
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    logger.warning("OpenAI package not installed. AI insights will use fallback generation.")
 
 from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType, IFRSEngineResult, IFRSEngineInput, IFRSApiConfig, CalculationValue, AssumptionReference, InputDataReference, SubmittedReport
 from .serializers import (
@@ -2685,7 +2694,381 @@ class AuditViewSet(viewsets.ReadOnlyModelViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=False, methods=['get'])
+    def submitted_reports_by_type(self, request):
+        report_type = request.query_params.get('report_type')
+        
+        if not report_type:
+            return Response({
+                'detail': 'report_type parameter is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            submitted_reports = SubmittedReport.objects.filter(
+                report_type=report_type,
+                status='active'
+            ).select_related().order_by('-assign_year', '-assign_quarter', '-created_on')
+            
+            results = []
+            for report in submitted_reports:
+                try:
+                    engine_result = IFRSEngineResult.objects.get(id=report.ifrs_engine_result_id)
+                    results.append({
+                        'id': report.id,
+                        'run_id': report.run_id,
+                        'report_type': report.report_type,
+                        'report_type_display': report.report_type_display or report.report_type.replace('_', ' ').title(),
+                        'model_type': report.model_type,
+                        'assign_year': report.assign_year,
+                        'assign_quarter': report.assign_quarter,
+                        'status': report.status,
+                        'created_at': report.created_on,
+                        'display_name': f"{report.report_type_display or report.report_type.replace('_', ' ').title()} - {report.run_id} - {report.assign_year} {report.assign_quarter}"
+                    })
+                except IFRSEngineResult.DoesNotExist:
+                    logger.warning(f"IFRSEngineResult not found for submitted report {report.id}")
+                    continue
+            
+            return Response({
+                'detail': 'Success',
+                'results': results
+            })
+            
+        except Exception as e:
+            logger.error(f"Error fetching submitted reports: {str(e)}")
+            return Response({
+                'detail': f'Error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
     def compare_runs(self, request):
-        return Response({
-            'detail': 'This feature will be available in Phase 2'
-        }, status=status.HTTP_501_NOT_IMPLEMENTED)
+        current_run_id = request.query_params.get('current_run_id')
+        prior_run_id = request.query_params.get('prior_run_id')
+        value_id = request.query_params.get('value_id')
+        
+        if not current_run_id or not prior_run_id or not value_id:
+            return Response({
+                'detail': 'current_run_id, prior_run_id, and value_id parameters are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            current_result = IFRSEngineResult.objects.filter(run_id=current_run_id).first()
+            prior_result = IFRSEngineResult.objects.filter(run_id=prior_run_id).first()
+            
+            if not current_result:
+                return Response({
+                    'detail': f'Current run {current_run_id} not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            if not prior_result:
+                return Response({
+                    'detail': f'Prior run {prior_run_id} not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            current_json = current_result.result_json or {}
+            prior_json = prior_result.result_json or {}
+            
+            current_value = None
+            prior_value = None
+            
+            if isinstance(current_json, dict) and 'calculations' in current_json:
+                calculations = current_json['calculations']
+                for key, calc_data in calculations.items():
+                    if calc_data.get('value_id') == value_id:
+                        current_value = {
+                            'value_id': value_id,
+                            'amount': calc_data.get('amount', 0),
+                            'metadata': current_json.get('metadata', {})
+                        }
+                        break
+            
+            if isinstance(prior_json, dict) and 'calculations' in prior_json:
+                calculations = prior_json['calculations']
+                for key, calc_data in calculations.items():
+                    if calc_data.get('value_id') == value_id:
+                        prior_value = {
+                            'value_id': value_id,
+                            'amount': calc_data.get('amount', 0),
+                            'metadata': prior_json.get('metadata', {})
+                        }
+                        break
+            
+            if not current_value:
+                return Response({
+                    'detail': f'Value {value_id} not found in current run {current_run_id}'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            if not prior_value:
+                return Response({
+                    'detail': f'Value {value_id} not found in prior run {prior_run_id}'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            current_amount = float(current_value['amount'])
+            prior_amount = float(prior_value['amount'])
+            absolute_change = current_amount - prior_amount
+            percentage_change = ((current_amount - prior_amount) / prior_amount * 100) if prior_amount != 0 else 0
+            
+            try:
+                current_calc_value = CalculationValue.objects.prefetch_related(
+                    'assumptions', 'input_refs'
+                ).filter(run_id=current_run_id, value_id=value_id).first()
+                
+                prior_calc_value = CalculationValue.objects.prefetch_related(
+                    'assumptions', 'input_refs'
+                ).filter(run_id=prior_run_id, value_id=value_id).first()
+            except Exception:
+                current_calc_value = None
+                prior_calc_value = None
+            
+            comparison_data = {
+                'value_id': value_id,
+                'current_run_id': current_run_id,
+                'prior_run_id': prior_run_id,
+                'current_value': current_amount,
+                'prior_value': prior_amount,
+                'absolute_change': absolute_change,
+                'percentage_change': percentage_change,
+                'current_metadata': current_value['metadata'],
+                'prior_metadata': prior_value['metadata'],
+                'has_audit_data': current_calc_value is not None and prior_calc_value is not None
+            }
+            
+            if current_calc_value and prior_calc_value:
+                assumption_changes = []
+                input_changes = []
+                
+                current_assumptions = {a.assumption_id: a for a in current_calc_value.assumptions.all()}
+                prior_assumptions = {a.assumption_id: a for a in prior_calc_value.assumptions.all()}
+                
+                for assumption_id, current_assumption in current_assumptions.items():
+                    if assumption_id not in prior_assumptions:
+                        assumption_changes.append({
+                            'type': 'added',
+                            'assumption_id': assumption_id,
+                            'assumption_type': current_assumption.assumption_type
+                        })
+                    elif current_assumption.assumption_version != prior_assumptions[assumption_id].assumption_version:
+                        assumption_changes.append({
+                            'type': 'version_changed',
+                            'assumption_id': assumption_id,
+                            'assumption_type': current_assumption.assumption_type,
+                            'prior_version': prior_assumptions[assumption_id].assumption_version,
+                            'current_version': current_assumption.assumption_version
+                        })
+                
+                for assumption_id in prior_assumptions:
+                    if assumption_id not in current_assumptions:
+                        assumption_changes.append({
+                            'type': 'removed',
+                            'assumption_id': assumption_id,
+                            'assumption_type': prior_assumptions[assumption_id].assumption_type
+                        })
+                
+                current_inputs = {i.dataset_name: i for i in current_calc_value.input_refs.all()}
+                prior_inputs = {i.dataset_name: i for i in prior_calc_value.input_refs.all()}
+                
+                for dataset_name, current_input in current_inputs.items():
+                    if dataset_name not in prior_inputs:
+                        input_changes.append({
+                            'type': 'added',
+                            'dataset_name': dataset_name,
+                            'record_count': current_input.record_count
+                        })
+                    elif current_input.source_snapshot_id != prior_inputs[dataset_name].source_snapshot_id:
+                        input_changes.append({
+                            'type': 'snapshot_changed',
+                            'dataset_name': dataset_name,
+                            'prior_snapshot': prior_inputs[dataset_name].source_snapshot_id,
+                            'current_snapshot': current_input.source_snapshot_id,
+                            'prior_record_count': prior_inputs[dataset_name].record_count,
+                            'current_record_count': current_input.record_count
+                        })
+                
+                for dataset_name in prior_inputs:
+                    if dataset_name not in current_inputs:
+                        input_changes.append({
+                            'type': 'removed',
+                            'dataset_name': dataset_name
+                        })
+                
+                comparison_data['assumption_changes'] = assumption_changes
+                comparison_data['input_changes'] = input_changes
+                comparison_data['formula_changed'] = (
+                    current_calc_value.formula_human_readable != prior_calc_value.formula_human_readable
+                )
+            
+            ai_insight = self._generate_ai_insight(comparison_data)
+            comparison_data['ai_insight'] = ai_insight
+            
+            return Response({
+                'detail': 'Success',
+                'result': comparison_data
+            })
+            
+        except Exception as e:
+            logger.error(f"Error comparing runs: {str(e)}")
+            return Response({
+                'detail': f'Error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _generate_ai_insight(self, comparison_data):
+        if OPENAI_AVAILABLE and settings.OPENAI_API_KEY:
+            try:
+                return self._generate_ai_insight_with_openai(comparison_data)
+            except Exception as e:
+                logger.error(f"OpenAI API call failed: {str(e)}")
+                return self._generate_fallback_insight(comparison_data)
+        else:
+            return self._generate_fallback_insight(comparison_data)
+    
+    def _generate_ai_insight_with_openai(self, comparison_data):
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        
+        absolute_change = comparison_data['absolute_change']
+        percentage_change = comparison_data['percentage_change']
+        current_value = comparison_data['current_value']
+        prior_value = comparison_data['prior_value']
+        value_id = comparison_data['value_id']
+        
+        prompt_parts = [
+            f"You are an IFRS 17 audit analyst reviewing changes in insurance contract valuations.",
+            f"\n\nValue ID: {value_id}",
+            f"\nCurrent Value: ${current_value:,.2f}",
+            f"Prior Value: ${prior_value:,.2f}",
+            f"Absolute Change: ${absolute_change:,.2f}",
+            f"Percentage Change: {percentage_change:.2f}%"
+        ]
+        
+        if comparison_data.get('has_audit_data'):
+            prompt_parts.append("\n\nDetailed Change Information:")
+            
+            if comparison_data.get('formula_changed'):
+                prompt_parts.append("\n- The calculation formula was modified between runs")
+            
+            assumption_changes = comparison_data.get('assumption_changes', [])
+            if assumption_changes:
+                prompt_parts.append(f"\n\nAssumption Changes ({len(assumption_changes)} total):")
+                for change in assumption_changes[:10]:
+                    change_type = change['type'].replace('_', ' ')
+                    assumption_type = change['assumption_type'].replace('_', ' ')
+                    if change['type'] == 'version_changed':
+                        prompt_parts.append(
+                            f"\n- {change_type.upper()}: {assumption_type} (ID: {change['assumption_id']}) "
+                            f"version changed from {change.get('prior_version', 'N/A')} to {change.get('current_version', 'N/A')}"
+                        )
+                    else:
+                        prompt_parts.append(
+                            f"\n- {change_type.upper()}: {assumption_type} (ID: {change['assumption_id']})"
+                        )
+                if len(assumption_changes) > 10:
+                    prompt_parts.append(f"\n- ... and {len(assumption_changes) - 10} more assumption changes")
+            
+            input_changes = comparison_data.get('input_changes', [])
+            if input_changes:
+                prompt_parts.append(f"\n\nInput Data Changes ({len(input_changes)} total):")
+                for change in input_changes[:10]:
+                    change_type = change['type'].replace('_', ' ')
+                    if change['type'] == 'snapshot_changed':
+                        record_change = change.get('current_record_count', 0) - change.get('prior_record_count', 0)
+                        prompt_parts.append(
+                            f"\n- {change_type.upper()}: {change['dataset_name']} "
+                            f"(snapshot: {change.get('prior_snapshot', 'N/A')} → {change.get('current_snapshot', 'N/A')}, "
+                            f"records changed by {record_change:+,})"
+                        )
+                    else:
+                        prompt_parts.append(
+                            f"\n- {change_type.upper()}: {change['dataset_name']}"
+                        )
+                if len(input_changes) > 10:
+                    prompt_parts.append(f"\n- ... and {len(input_changes) - 10} more input changes")
+        
+        prompt_parts.append(
+            "\n\nProvide a concise analysis (3-5 sentences) covering:"
+            "\n1. Magnitude assessment (negligible/minor/moderate/significant)"
+            "\n2. Primary drivers of the change"
+            "\n3. Potential implications for IFRS 17 compliance"
+            "\n4. Any red flags or items requiring auditor attention"
+            "\n\nBe specific and actionable. Focus on what an auditor needs to know."
+        )
+        
+        prompt = ''.join(prompt_parts)
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert IFRS 17 audit analyst with deep knowledge of insurance contract accounting, actuarial assumptions, and regulatory compliance. Provide clear, professional insights."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.3,
+            max_tokens=500
+        )
+        
+        ai_insight = response.choices[0].message.content.strip()
+        return ai_insight
+    
+    def _generate_fallback_insight(self, comparison_data):
+        absolute_change = comparison_data['absolute_change']
+        percentage_change = comparison_data['percentage_change']
+        
+        if abs(percentage_change) < 0.01:
+            magnitude = "negligible"
+        elif abs(percentage_change) < 5:
+            magnitude = "minor"
+        elif abs(percentage_change) < 20:
+            magnitude = "moderate"
+        else:
+            magnitude = "significant"
+        
+        direction = "increased" if absolute_change > 0 else "decreased"
+        
+        insight_parts = [
+            f"The value has {direction} by {abs(percentage_change):.2f}% (${abs(absolute_change):,.2f}), which represents a {magnitude} change."
+        ]
+        
+        if comparison_data.get('has_audit_data'):
+            changes = []
+            
+            if comparison_data.get('formula_changed'):
+                changes.append("calculation formula was modified")
+            
+            assumption_changes = comparison_data.get('assumption_changes', [])
+            if assumption_changes:
+                added = len([c for c in assumption_changes if c['type'] == 'added'])
+                removed = len([c for c in assumption_changes if c['type'] == 'removed'])
+                version_changed = len([c for c in assumption_changes if c['type'] == 'version_changed'])
+                
+                if added:
+                    changes.append(f"{added} assumption(s) were added")
+                if removed:
+                    changes.append(f"{removed} assumption(s) were removed")
+                if version_changed:
+                    changes.append(f"{version_changed} assumption(s) were updated to new versions")
+            
+            input_changes = comparison_data.get('input_changes', [])
+            if input_changes:
+                snapshot_changed = len([c for c in input_changes if c['type'] == 'snapshot_changed'])
+                added = len([c for c in input_changes if c['type'] == 'added'])
+                removed = len([c for c in input_changes if c['type'] == 'removed'])
+                
+                if snapshot_changed:
+                    changes.append(f"{snapshot_changed} input dataset(s) were updated with new data snapshots")
+                if added:
+                    changes.append(f"{added} input dataset(s) were added")
+                if removed:
+                    changes.append(f"{removed} input dataset(s) were removed")
+            
+            if changes:
+                insight_parts.append("\n\nKey drivers of the change:")
+                for i, change in enumerate(changes, 1):
+                    insight_parts.append(f"\n{i}. {change.capitalize()}")
+            else:
+                insight_parts.append("\n\nNo significant changes detected in assumptions, inputs, or formulas. The change may be due to indirect factors or rounding differences.")
+        else:
+            insight_parts.append("\n\nNote: Detailed audit data is not available for these runs. Enable audit trail tracking for more comprehensive change analysis.")
+        
+        return ''.join(insight_parts)

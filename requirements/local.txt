@@ -4,6 +4,15 @@
 #
 #    pip-compile '.\requirements\local.in'
 #
+annotated-types==0.7.0
+    # via
+    #   -r requirements/base.txt
+    #   pydantic
+anyio==4.5.2
+    # via
+    #   -r requirements/base.txt
+    #   httpx
+    #   openai
 asgiref==3.7.2
     # via
     #   -r requirements/base.txt
@@ -28,6 +37,8 @@ beautifulsoup4==4.12.2
 certifi==2023.11.17
     # via
     #   -r requirements/base.txt
+    #   httpcore
+    #   httpx
     #   requests
 cffi==1.16.0
     # via
@@ -45,6 +56,7 @@ colorama==0.4.6
     # via
     #   -r requirements/base.txt
     #   ipython
+    #   tqdm
 cryptography==41.0.5
     # via
     #   -r requirements/base.txt
@@ -65,6 +77,10 @@ deprecated==1.2.14
     # via fabric
 distlib==0.3.7
     # via virtualenv
+distro==1.9.0
+    # via
+    #   -r requirements/base.txt
+    #   openai
 dj-rest-auth==5.0.2
     # via -r requirements/base.txt
 django==3.2.12
@@ -120,6 +136,10 @@ et-xmlfile==2.0.0
     # via
     #   -r requirements/base.txt
     #   openpyxl
+exceptiongroup==1.3.1
+    # via
+    #   -r requirements/base.txt
+    #   anyio
 executing==2.0.1
     # via
     #   -r requirements/base.txt
@@ -138,11 +158,25 @@ gitdb==4.0.11
     #   gitpython
 gitpython==3.1.40
     # via -r requirements/base.txt
+h11==0.16.0
+    # via
+    #   -r requirements/base.txt
+    #   httpcore
+httpcore==1.0.9
+    # via
+    #   -r requirements/base.txt
+    #   httpx
+httpx==0.28.1
+    # via
+    #   -r requirements/base.txt
+    #   openai
 identify==2.5.32
     # via pre-commit
 idna==3.4
     # via
     #   -r requirements/base.txt
+    #   anyio
+    #   httpx
     #   requests
 importlib-metadata==6.8.0
     # via -r requirements/base.txt
@@ -176,6 +210,8 @@ oauthlib==3.2.2
     # via
     #   -r requirements/base.txt
     #   requests-oauthlib
+openai==1.39.0
+    # via -r requirements/base.txt
 openpyxl==3.1.2
     # via -r requirements/base.txt
 packaging==23.2
@@ -225,6 +261,14 @@ pycparser==2.21
     # via
     #   -r requirements/base.txt
     #   cffi
+pydantic==2.9.2
+    # via
+    #   -r requirements/base.txt
+    #   openai
+pydantic-core==2.23.4
+    # via
+    #   -r requirements/base.txt
+    #   pydantic
 pyflakes==3.1.0
     # via flake8
 pygments==2.17.0
@@ -279,6 +323,11 @@ smmap==5.0.1
     # via
     #   -r requirements/base.txt
     #   gitdb
+sniffio==1.3.1
+    # via
+    #   -r requirements/base.txt
+    #   anyio
+    #   openai
 soupsieve==2.5
     # via
     #   -r requirements/base.txt
@@ -298,6 +347,10 @@ svg-path==7.0
     #   fpdf2
 tomli==2.0.1
     # via autopep8
+tqdm==4.67.3
+    # via
+    #   -r requirements/base.txt
+    #   openai
 traitlets==5.13.0
     # via
     #   -r requirements/base.txt
@@ -306,8 +359,14 @@ traitlets==5.13.0
 typing-extensions==4.8.0
     # via
     #   -r requirements/base.txt
+    #   annotated-types
+    #   anyio
     #   asgiref
+    #   exceptiongroup
     #   ipython
+    #   openai
+    #   pydantic
+    #   pydantic-core
 tzdata==2025.2
     # via
     #   -r requirements/base.txt

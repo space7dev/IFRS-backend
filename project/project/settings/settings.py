@@ -75,3 +75,5 @@ CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[
     "http://localhost:8080",
     "http://localhost:3000"
 ])
+
+OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
