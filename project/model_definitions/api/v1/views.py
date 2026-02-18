@@ -2282,31 +2282,28 @@ class IFRSEngineResultViewSet(viewsets.ModelViewSet):
         
         try:
             is_temp_script = False
+            script_path = None
             
-            if report_type.report_type == 'disclosure_report':
-                script_path = os.path.join(settings.BASE_DIR, 'disclosure_ifrs_engine.py')
-                is_temp_script = False
-                if not os.path.exists(script_path):
-                    return {
-                        'error': 'Disclosure IFRS engine not found',
-                        'run_id': run_id
-                    }
-            else:
-                if not ifrs_engine:
-                    return {
-                        'error': 'IFRS engine not provided',
-                        'run_id': run_id
-                    }
+            try:
+                calculation_config = CalculationConfig.objects.get(
+                    batch_type=batch.batch_type,
+                    batch_model=batch.batch_model,
+                    insurance_type=batch.insurance_type,
+                    engine_type=report_type.report_type
+                )
                 
-                if not ifrs_engine.script:
-                    script_path = os.path.join(settings.BASE_DIR, 'ifrs_engine.py')
-                    is_temp_script = False
-                    if not os.path.exists(script_path):
-                        return {
-                            'error': f'No script uploaded for engine {ifrs_engine.engine_type} and no default engine found',
-                            'run_id': run_id
-                        }
-                else:
+                if calculation_config.script:
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as script_file:
+                        script_content = calculation_config.script.read().decode('utf-8')
+                        script_file.write(script_content)
+                        script_file.flush()
+                        script_path = script_file.name
+                        is_temp_script = True
+            except CalculationConfig.DoesNotExist:
+                pass
+            
+            if not script_path and ifrs_engine:
+                if ifrs_engine.script:
                     with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as script_file:
                         script_content = ifrs_engine.script.read().decode('utf-8')
                         script_file.write(script_content)
