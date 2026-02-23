@@ -2992,12 +2992,13 @@ class AuditViewSet(viewsets.ReadOnlyModelViewSet):
                     prompt_parts.append(f"\n- ... and {len(input_changes) - 10} more input changes")
         
         prompt_parts.append(
-            "\n\nProvide a concise analysis (3-5 sentences) covering:"
-            "\n1. Magnitude assessment (negligible/minor/moderate/significant)"
-            "\n2. Primary drivers of the change"
-            "\n3. Potential implications for IFRS 17 compliance"
-            "\n4. Any red flags or items requiring auditor attention"
-            "\n\nBe specific and actionable. Focus on what an auditor needs to know."
+            "\n\nProvide your analysis structured into exactly these 4 numbered sections with bold headers. "
+            "Each section should be 1-3 sentences, specific and actionable:"
+            "\n\n1. Magnitude Assessment: Describe the size of the change (negligible/minor/moderate/significant) with context."
+            "\n\n2. Primary Drivers of the Change: Explain what specifically caused this movement based on the data provided."
+            "\n\n3. Potential Implications for IFRS 17 Compliance: Describe what this means from a regulatory and reporting perspective."
+            "\n\n4. Red Flags or Items Requiring Auditor Attention: List any concerns, risks, or items needing follow-up."
+            "\n\nReturn only the 4 numbered sections. No introduction, no conclusion. Focus on what an auditor needs to know."
         )
         
         prompt = ''.join(prompt_parts)
