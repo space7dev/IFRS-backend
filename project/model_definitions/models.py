@@ -10,8 +10,19 @@ User = get_user_model()
 
 
 class ModelDefinition(TimeStampedMixin):
+    DEFINITION_TYPE_CHOICES = [
+        (1, 'Direct'),
+        (2, 'Group'),
+        (3, 'Reinsurance'),
+    ]
+
     name = models.CharField(max_length=100, unique=True)
     version = models.CharField(max_length=20, default="v1.0")
+    definition_type = models.IntegerField(
+        choices=DEFINITION_TYPE_CHOICES,
+        default=1,
+        help_text="1 = Direct, 2 = Group, 3 = Reinsurance"
+    )
     config = models.JSONField(default=dict)  # All configuration including generalInfo (description, status, productType, measurementModel), assumptions, formulas, parameters
     
     created_by = models.ForeignKey(

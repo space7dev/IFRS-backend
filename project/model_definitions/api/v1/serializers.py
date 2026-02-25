@@ -46,6 +46,7 @@ class ModelDefinitionListSerializer(serializers.ModelSerializer):
             'id',
             'name',
             'version',
+            'definition_type',
             'config',
             'created_by',
             'created_by_name',
@@ -109,6 +110,7 @@ class ModelDefinitionDetailSerializer(serializers.ModelSerializer):
             'id',
             'name',
             'version',
+            'definition_type',
             'config',
             'created_by',
             'created_by_name',
@@ -171,6 +173,7 @@ class ModelDefinitionCreateSerializer(serializers.ModelSerializer):
         model = ModelDefinition
         fields = [
             'name',
+            'definition_type',
             'config',
             'cloned_from'
         ]
@@ -211,6 +214,8 @@ class ModelDefinitionCreateSerializer(serializers.ModelSerializer):
         if cloned_from:
             validated_data['config'] = cloned_from.config.copy()
             validated_data['cloned_from'] = cloned_from
+            if 'definition_type' not in validated_data:
+                validated_data['definition_type'] = cloned_from.definition_type
         
         if 'config' not in validated_data:
             validated_data['config'] = {}
@@ -234,6 +239,7 @@ class ModelDefinitionUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ModelDefinition
         fields = [
+            'definition_type',
             'config'
         ]
 

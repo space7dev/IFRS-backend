@@ -82,7 +82,7 @@ class ModelDefinitionViewSet(viewsets.ModelViewSet):
     queryset = ModelDefinition.objects.all()
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['created_by']
+    filterset_fields = ['created_by', 'definition_type']
     search_fields = ['name']
     ordering_fields = ['name', 'created_on', 'modified_on']
     ordering = ['-modified_on']
@@ -110,6 +110,10 @@ class ModelDefinitionViewSet(viewsets.ModelViewSet):
         status = self.request.query_params.get('status')
         if status:
             queryset = queryset.filter(config__general_info__status=status)
+        
+        definition_type = self.request.query_params.get('definition_type')
+        if definition_type:
+            queryset = queryset.filter(definition_type=definition_type)
         
         return queryset
 
@@ -261,8 +265,11 @@ class ModelDefinitionViewSet(viewsets.ModelViewSet):
                 'measurement_model': 'GMM',  # Default value
             }
         
+        new_definition_type = request.data.get('definition_type', source_instance.definition_type)
+        
         cloned_data = {
             'name': new_name,
+            'definition_type': new_definition_type,
             'config': cloned_config,
             'cloned_from': source_instance.id
         }
