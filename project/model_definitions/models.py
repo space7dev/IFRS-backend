@@ -1549,3 +1549,50 @@ class InputDataReference(models.Model):
     def __str__(self):
         return f"{self.dataset_name} ({self.record_count} records)"
 
+
+class AIVarianceAnalysis(models.Model):
+    run_id_current = models.CharField(
+        max_length=100,
+        db_index=True,
+        help_text="Run ID of the current report selected for comparison"
+    )
+    run_id_prior = models.CharField(
+        max_length=100,
+        db_index=True,
+        help_text="Run ID of the prior/baseline report selected for comparison"
+    )
+    value_id = models.CharField(
+        max_length=200,
+        db_index=True,
+        help_text="Selected ValueID being compared"
+    )
+    current_json_snapshot = models.JSONField(
+        default=dict,
+        help_text="Exact JSON used for the current run in this comparison"
+    )
+    prior_json_snapshot = models.JSONField(
+        default=dict,
+        help_text="Exact JSON used for the prior run in this comparison"
+    )
+    ai_response_json = models.JSONField(
+        default=dict,
+        help_text="Structured AI output (comparison result and insight)"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        help_text="When this analysis was created"
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'AI Variance Analysis'
+        verbose_name_plural = 'AI Variance Analyses'
+        db_table = 'ai_variance_analysis'
+        indexes = [
+            models.Index(fields=['run_id_current', 'run_id_prior', 'value_id']),
+        ]
+
+    def __str__(self):
+        return f"{self.value_id} ({self.run_id_current} vs {self.run_id_prior})"
+

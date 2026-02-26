@@ -24,7 +24,7 @@ except ImportError:
     OPENAI_AVAILABLE = False
     logger.warning("OpenAI package not installed. AI insights will use fallback generation.")
 
-from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType, IFRSEngineResult, IFRSEngineInput, IFRSApiConfig, CalculationValue, AssumptionReference, InputDataReference, SubmittedReport
+from model_definitions.models import ModelDefinition, ModelDefinitionHistory, DataUploadBatch, DataUpload, DataUploadTemplate, APIUploadLog, DataBatchStatus, DocumentTypeConfig, CalculationConfig, ConversionConfig, Currency, LineOfBusiness, ReportType, IFRSEngineResult, IFRSEngineInput, IFRSApiConfig, CalculationValue, AssumptionReference, InputDataReference, SubmittedReport, AIVarianceAnalysis
 from .serializers import (
     ModelDefinitionListSerializer,
     ModelDefinitionDetailSerializer,
@@ -2755,6 +2755,17 @@ class AuditViewSet(viewsets.ReadOnlyModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
+            existing = AIVarianceAnalysis.objects.filter(
+                run_id_current=current_run_id,
+                run_id_prior=prior_run_id,
+                value_id=value_id,
+            ).order_by('-created_at').first()
+            if existing:
+                return Response({
+                    'detail': 'Success',
+                    'result': existing.ai_response_json,
+                })
+            
             current_result = IFRSEngineResult.objects.filter(run_id=current_run_id).first()
             prior_result = IFRSEngineResult.objects.filter(run_id=prior_run_id).first()
             
@@ -2902,6 +2913,18 @@ class AuditViewSet(viewsets.ReadOnlyModelViewSet):
             
             ai_insight = self._generate_ai_insight(comparison_data)
             comparison_data['ai_insight'] = ai_insight
+            
+            try:
+                AIVarianceAnalysis.objects.create(
+                    run_id_current=current_run_id,
+                    run_id_prior=prior_run_id,
+                    value_id=value_id,
+                    current_json_snapshot=current_json if isinstance(current_json, dict) else {},
+                    prior_json_snapshot=prior_json if isinstance(prior_json, dict) else {},
+                    ai_response_json=comparison_data,
+                )
+            except Exception as save_err:
+                logger.warning(f"Failed to save AI variance analysis record: {str(save_err)}")
             
             return Response({
                 'detail': 'Success',
